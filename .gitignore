@@ -1,0 +1,93 @@
+# Entornos y Secretos
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+nosetests.xml
+coverage.xml
+*.cover
+*.log
+
+# Entornos Docker y Volúmenes Locales
+sapi_db_data/
+sapi_redis_data/
+uploads/
+sapi_backend/uploads/
+large_tool_results/
+test_document.pdf
+
+# Frontend Node.js
+node_modules/
+sapi_frontend/node_modules/
+.npm/
+.yarn/
+dist/
+build/
+.next/
+.nuxt/
+out/
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# IDEs y Editores
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+*.suo
+*.user
+*.userosscache
+*.sln
+*.xyz
+*.iml
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# Herramientas de análisis estático
+.mypy_cache/
+.ruff_cache/
+
+# Archivos personales y de configuración
+*.log
+*.bak
+*.tmp
+*.orig
+*.backup
+*.old
+Sample-SAPI
+

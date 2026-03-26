@@ -1,0 +1,85 @@
+import apiClient from './client';
+import type {
+  Document,
+  DocumentDetail,
+  DocumentStatusResponse,
+  PaginatedResponse,
+  DocumentType,
+  ExtractedDataUpdate,
+  UploadResponse,
+  DocumentStatus,
+} from '@/types';
+
+export interface DocumentFilters {
+  page?: number;
+  size?: number;
+  status?: DocumentStatus;
+  document_type_id?: string;
+  search_query?: string;
+}
+
+export const documentsApi = {
+  listDocuments: async (filters: DocumentFilters = {}): Promise<PaginatedResponse<Document>> => {
+    const params = new URLSearchParams();
+    if (filters.page) params.append('page', filters.page.toString());
+    if (filters.size) params.append('size', filters.size.toString());
+    if (filters.status) params.append('status', filters.status);
+    if (filters.document_type_id) params.append('document_type_id', filters.document_type_id);
+    if (filters.search_query) params.append('search_query', filters.search_query);
+
+    const response = await apiClient.get<PaginatedResponse<Document>>('/documents/', { params });
+    return response.data;
+  },
+
+  getDocument: async (documentId: string): Promise<Document> => {
+    const response = await apiClient.get<Document>(`/documents/${documentId}`);
+    return response.data;
+  },
+
+  getDocumentStatus: async (documentId: string): Promise<DocumentStatusResponse> => {
+    const response = await apiClient.get<DocumentStatusResponse>(`/documents/${documentId}/status`);
+    return response.data;
+  },
+
+  getDocumentData: async (documentId: string): Promise<DocumentDetail> => {
+    const response = await apiClient.get<DocumentDetail>(`/documents/${documentId}/data`);
+    return response.data;
+  },
+
+  updateDocumentData: async (documentId: string, updates: ExtractedDataUpdate[]): Promise<void> => {
+    await apiClient.put(`/documents/${documentId}/data`, { updates });
+  },
+
+  uploadDocument: async (file: File, documentTypeId?: string): Promise<UploadResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    if (documentTypeId) {
+      formData.append('document_type_id', documentTypeId);
+    }
+
+    const response = await apiClient.post<UploadResponse>('/documents/', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+      },
+    });
+    return response.data;
+  },
+
+  downloadDocument: async (documentId: string, filename: string): Promise<void> => {
+    const response = await apiClient.get(`/documents/${documentId}/download`, {
+      responseType: 'blob',
+    });
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', filename);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  },
+
+  listDocumentTypes: async (): Promise<DocumentType[]> => {
+    const response = await apiClient.get<DocumentType[]>('/documents/types/');
+    return response.data;
+  },
+};
