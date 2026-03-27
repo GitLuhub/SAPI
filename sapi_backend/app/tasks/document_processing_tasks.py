@@ -31,7 +31,9 @@ def process_document_task(self, document_id: str) -> dict:
         document.processing_started_at = datetime.utcnow()
         db.commit()
         
-        file_content = storage_service.download_file(document.storage_path)
+        # We need to run the async download in a sync way
+        import asyncio
+        file_content = asyncio.run(storage_service.download_file(document.storage_path))
         
         if isinstance(file_content, bytes):
             try:
