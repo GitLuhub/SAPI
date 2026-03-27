@@ -11,6 +11,8 @@ from app.db.models.document import Document, DocumentType
 from app.db.models.extracted_data import ExtractedData
 from app.services.ai_service import ai_service
 from app.services.storage_service import storage_service
+from app.services.notification_service import notification_service
+from app.db.models.user import User
 
 
 logger = logging.getLogger(__name__)
@@ -93,9 +95,18 @@ def process_document_task(self, document_id: str) -> dict:
         
         document.processing_completed_at = datetime.utcnow()
         db.commit()
-        
+
+        user = db.query(User).filter(User.id == document.upload_user_id).first()
+        if user and user.email:
+            notification_service.notify_document_processed(
+                to_email=user.email,
+                document_name=document.original_filename,
+                document_id=str(document.id),
+                status=document.status,
+            )
+
         logger.info(f"Document processed successfully: {document_id}")
-        
+
         return {
             "status": "success",
             "document_id": document_id,

@@ -4,8 +4,10 @@ from datetime import datetime
 from typing import List, Optional, Tuple
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Query
 from sqlalchemy.orm import Session
+
+from app.core.limiter import limiter
 
 from app.api.v1.deps import get_db, get_current_user
 from app.schemas.document import (
@@ -19,6 +21,7 @@ from app.db.models.document import Document, DocumentType
 from app.db.models.extracted_data import ExtractedData
 from app.services.storage_service import StorageService
 from app.services.message_broker_service import MessageBrokerService
+from app.services.notification_service import notification_service
 
 
 router = APIRouter()
@@ -94,7 +97,9 @@ async def list_documents(
 
 
 @router.post("/", response_model=DocumentStatusResponse, status_code=status.HTTP_202_ACCEPTED)
+@limiter.limit("10/minute")
 async def upload_document(
+    request: Request,
     file: UploadFile = File(...),
     document_type_id: Optional[UUID] = None,
     db: Session = Depends(get_db),
@@ -141,7 +146,14 @@ async def upload_document(
     
     message_broker = MessageBrokerService()
     message_broker.publish_document_processing(str(document.id))
-    
+
+    if current_user.email:
+        notification_service.notify_document_uploaded(
+            to_email=current_user.email,
+            document_name=file.filename,
+            document_id=str(document.id),
+        )
+
     return DocumentStatusResponse(
         id=document.id,
         status=DocumentStatus.UPLOADED,
@@ -329,6 +341,27 @@ async def download_document(
         headers={
             "Content-Disposition": f'attachment; filename="{document.original_filename}"'
         }
+    )
+
+
+@router.get("/{document_id}/preview")
+async def preview_document(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> dict:
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+
+    storage_service = StorageService()
+    file_content = await storage_service.download_file(document.storage_path)
+
+    from fastapi.responses import Response
+    return Response(
+        content=file_content,
+        media_type=document.mime_type or "application/octet-stream",
+        headers={"Content-Disposition": f'inline; filename="{document.original_filename}"'},
     )
 
 
