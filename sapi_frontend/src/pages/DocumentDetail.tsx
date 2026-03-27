@@ -6,13 +6,13 @@ import {
   ArrowLeft,
   Save,
   Download,
-  FileText,
   Loader2,
   CheckCircle,
   AlertCircle,
 } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
+import PdfViewer from '@/components/ui/PdfViewer';
 
 export default function DocumentDetailPage() {
   const { documentId } = useParams<{ documentId: string }>();
@@ -114,13 +114,7 @@ export default function DocumentDetailPage() {
             <h2 className="text-lg font-semibold text-secondary-900 mb-4">
               Documento Original
             </h2>
-            <div className="aspect-[3/4] bg-secondary-100 rounded-lg flex items-center justify-center">
-              <div className="text-center text-secondary-500">
-                <FileText className="w-16 h-16 mx-auto mb-4" />
-                <p>Vista previa no disponible</p>
-                <p className="text-sm mt-2">{document.mime_type}</p>
-              </div>
-            </div>
+            <PdfViewer documentId={documentId!} mimeType={document.mime_type || ''} />
           </div>
 
           <div className="bg-white rounded-xl shadow-sm p-6">

@@ -65,6 +65,13 @@ export const documentsApi = {
     return response.data;
   },
 
+  previewDocument: async (documentId: string): Promise<string> => {
+    const response = await apiClient.get(`/documents/${documentId}/preview`, {
+      responseType: 'blob',
+    });
+    return URL.createObjectURL(response.data as Blob);
+  },
+
   downloadDocument: async (documentId: string, filename: string): Promise<void> => {
     const response = await apiClient.get(`/documents/${documentId}/download`, {
       responseType: 'blob',

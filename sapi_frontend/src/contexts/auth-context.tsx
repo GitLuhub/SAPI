@@ -9,8 +9,9 @@ interface AuthState {
   isAuthenticated: boolean;
   isLoading: boolean;
   login: (username: string, password: string) => Promise<void>;
-  logout: () => void;
+  logout: () => Promise<void>;
   setUser: (user: User) => void;
+  setToken: (token: string) => void;
   checkAuth: () => Promise<void>;
 }
 
@@ -36,12 +37,21 @@ export const useAuthStore = create<AuthState>()(
         }
       },
 
-      logout: () => {
+      logout: async () => {
+        try {
+          await authApi.logout();
+        } catch {
+          // ignorar errores de red al cerrar sesión
+        }
         set({ user: null, token: null, isAuthenticated: false });
       },
 
       setUser: (user: User) => {
         set({ user, isAuthenticated: true });
+      },
+
+      setToken: (token: string) => {
+        set({ token });
       },
 
       checkAuth: async () => {
@@ -66,6 +76,6 @@ export const useAuthStore = create<AuthState>()(
         user: state.user,
         isAuthenticated: state.isAuthenticated,
       }),
-    }
-  )
+    },
+  ),
 );
