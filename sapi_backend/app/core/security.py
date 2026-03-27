@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from typing import Optional, Any
+from typing import Dict, Any, Optional
 import uuid
 
 from passlib.context import CryptContext
@@ -14,41 +14,58 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password[:72], hashed_password)
 
+
 def get_password_hash(password: str) -> str:
     return pwd_context.hash(password[:72])
 
 
 def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
-    
+    expire = datetime.utcnow() + (
+        expires_delta if expires_delta
+        else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    )
     to_encode: Dict[str, Any] = {
-        "exp": expire, 
+        "exp": expire,
         "sub": str(subject),
         "iat": datetime.utcnow(),
-        "jti": str(uuid.uuid4())
+        "jti": str(uuid.uuid4()),
+        "type": "access",
     }
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
-    return encoded_jwt
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
 
 def decode_access_token(token: str) -> Optional[str]:
     try:
-        payload = jwt.decode(
-            token, 
-            settings.SECRET_KEY, 
-            algorithms=[settings.ALGORITHM]
-        )
-        subject: str = payload.get("sub")
-        if subject is None:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "access":
             return None
-        return subject
+        subject: str = payload.get("sub")
+        return subject if subject else None
     except JWTError:
         return None
 
 
-from typing import Dict, Any
+def create_refresh_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
+    expire = datetime.utcnow() + (
+        expires_delta if expires_delta
+        else timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    )
+    to_encode: Dict[str, Any] = {
+        "exp": expire,
+        "sub": str(subject),
+        "iat": datetime.utcnow(),
+        "jti": str(uuid.uuid4()),
+        "type": "refresh",
+    }
+    return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+
+def decode_refresh_token(token: str) -> Optional[str]:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "refresh":
+            return None
+        subject: str = payload.get("sub")
+        return subject if subject else None
+    except JWTError:
+        return None

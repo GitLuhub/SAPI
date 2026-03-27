@@ -21,6 +21,7 @@ boto3
 
 python-multipart
 python-dotenv
+slowapi
 
 pytest
 pytest-asyncio
