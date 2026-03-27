@@ -39,7 +39,7 @@ class GeminiAIService:
             self.client = None
         else:
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.client = genai.GenerativeModel('gemini-pro')
+            self.client = genai.GenerativeModel('gemini-1.5-pro')
     
     def _parse_json_response(self, response_text: str) -> Dict:
         try:
@@ -69,7 +69,7 @@ class GeminiAIService:
             logger.error(f"Error calling Gemini API: {e}")
             raise
     
-    async def classify_document(self, text: str) -> Tuple[str, float]:
+    def classify_document(self, text: str) -> Tuple[str, float]:
         if not self.client:
             return "Factura de Proveedor", "0.75"
         
@@ -98,7 +98,7 @@ Responde SOLO con JSON en este formato exacto:
             logger.error(f"Classification error: {e}")
             return "Factura de Proveedor", "0.50"
     
-    async def extract_entities(
+    def extract_entities(
         self, 
         text: str, 
         doc_type: str
@@ -147,7 +147,7 @@ Responde SOLO con JSON en este formato:
             logger.error(f"Entity extraction error: {e}")
             return []
     
-    async def summarize_document(self, text: str) -> str:
+    def summarize_document(self, text: str) -> str:
         if not self.client:
             return "Resumen no disponible (AI no configurada)."
         
