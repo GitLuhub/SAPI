@@ -1,7 +1,7 @@
 # SAPI — Contexto del Proyecto para Claude Code
 
 ## ¿Qué es SAPI?
-**Sistema de Automatización y Procesamiento Documental Inteligente.** Plataforma AI que extrae, clasifica y resume automáticamente **facturas y contratos** usando Google Gemini 1.5 Pro, con revisión humana (Human-in-the-Loop).
+**Sistema de Automatización y Procesamiento Documental Inteligente.** Plataforma AI que extrae, clasifica y resume automáticamente **facturas y contratos** usando Google Gemini API, con revisión humana (Human-in-the-Loop).
 
 ---
 
@@ -11,7 +11,7 @@
 |------|-----------|
 | Backend | FastAPI + Python 3.11, SQLAlchemy 2.0, Alembic, PostgreSQL 15 |
 | Async | Celery + Redis 7 (colas `ai_processing` y `notifications`) |
-| IA | Google Gemini API (clasificar, extraer entidades, resumir) |
+| IA | Google Gemini API — `gemini-2.5-flash` (clasificar, extraer entidades, resumir) |
 | Frontend | React 18 + TypeScript, Vite, Tailwind CSS, Zustand, React Query |
 | Infra | Docker Compose (8 contenedores), Nginx como reverse proxy |
 | Rate Limiting | slowapi (basado en IP) |
@@ -155,6 +155,8 @@ SAPI/
 | GET | `/{id}/preview` | — | Preview inline |
 | GET | `/types/` | — | Listar tipos de documento |
 
+> **Pendiente:** `DELETE /{id}` no está implementado (RF004 del PRD).
+
 ### Users (`/api/v1/users/`)
 | Método | Ruta | Acceso | Descripción |
 |--------|------|--------|-------------|
@@ -175,6 +177,7 @@ SAPI/
   - Campos: `original_filename`, `storage_path`, `file_size`, `mime_type`, `classification_confidence`, `executive_summary`, `processing_error`
 - **ExtractedData** — `ai_extracted_value` + `ai_confidence` + `final_value` + `is_corrected` + `corrected_by_user_id` (Human-in-the-Loop)
 - **AuditLog** — `user_id`, `action`, `entity_type`, `entity_id`, `details`, `ip_address`, `timestamp`
+  - ⚠️ El modelo existe completo pero **ningún endpoint escribe en esta tabla aún**.
 
 ---
 
@@ -202,6 +205,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 - **Rate limiting:** slowapi en auth (5/min login, 3/min register) y upload (10/min)
 - **Storage:** LOCAL (dev) o AWS_S3 (producción) via `STORAGE_PROVIDER`
 - **Email:** CONSOLE (dev, loguea en logger) o SMTP (producción) via `EMAIL_PROVIDER`
+- ⚠️ `secure=False` en la cookie del refresh token — debe cambiarse a `True` en producción.
 
 ---
 
@@ -213,38 +217,29 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | **Fase 1** — Backend Core | ✅ Completa | JWT auth + refresh, CRUD documentos, storage S3/local, modelos DB |
 | **Fase 2** — IA/Workers | ✅ Completa | Gemini integrado, Celery con reintentos, extracción de entidades |
 | **Fase 3** — Frontend | ✅ Completa | Login, Dashboard, DocumentDetail, upload, corrección HIL, PDF viewer |
-| **Fase 4** — Testing | ✅ Completa | 156 tests, cobertura 100% (pytest --cov --fail-under=80) |
-| **Fase 5** — Deploy | ❌ Pendiente | CI/CD, SSL, monitoreo, producción |
-
----
-
-## Issues Pendientes (Reales)
-
-1. **Rate limiting incompleto** — solo en auth y upload; los endpoints GET, PUT y admin no tienen throttling
-2. **Dos endpoints de login redundantes** — `POST /auth/login` (form-data) y `POST /auth/login/json` (JSON body); deberían unificarse o documentarse la distinción
-3. **`/crud/` vacío** — la lógica CRUD vive directamente en los endpoints; no hay capa de repositorio
-4. **Celery Beat sin tareas programadas** — `celery_beat` está configurado y en Docker Compose, pero no hay tareas periódicas definidas
-5. **HTTPS no configurado en Nginx** — solo puerto 80 activo; producción requiere SSL/TLS
-6. **`hooks/` vacío** — directorio creado pero sin custom hooks de React
+| **Fase 4** — Testing | ✅ Completa | 156 tests, cobertura 100% backend (pytest --cov --fail-under=80) |
+| **Fase 5** — Hardening | 🔄 En curso | Ver plan de producción más abajo |
 
 ---
 
 ## KPIs del Proyecto
 
-| KPI | Objetivo |
-|-----|----------|
-| Precisión clasificación IA | >90% |
-| Tiempo procesamiento | <30s/documento |
-| Tiempo respuesta API | <500ms |
-| Cobertura de tests | ✅ 100% (156 tests) |
-| Reducción trabajo manual | -70% |
-| Volumen objetivo | 10,000 docs/mes |
+| KPI | Objetivo | Estado |
+|-----|----------|--------|
+| Precisión clasificación IA | >90% | ✅ Verificado en producción (0.95–0.99) |
+| Tiempo procesamiento | <30s/documento | ❓ Sin medir formalmente |
+| Tiempo respuesta API | <500ms | ❓ Sin medir formalmente |
+| Cobertura de tests (backend) | 100% | ✅ 156 tests |
+| Cobertura de tests (frontend) | >80% | ❌ 0% (sin tests) |
+| Reducción trabajo manual | -70% | ❓ Sin medir |
+| Volumen objetivo | 10 000 docs/mes | ❓ Sin test de carga |
 
 ---
 
 ## Documentación de Referencia
 
 - **PRD y specs:** `Sample-SAPI/` (00_prd.md, 01_arquitectura.md, 02_spec_backend.md, 04_spec_frontend.md)
+- **Informe de verificación PRD/Arquitectura:** `informe-prd-arquitectura-SAPI.md` ← leer antes de iniciar Fase 5
 - **Plan de desarrollo:** `PLAN_CORRECCIONES_Y_DESARROLLO_SAPI.md`
 - **README:** `README.md`
 
@@ -289,3 +284,332 @@ python -m pytest --cov=app --cov-report=html
 ```
 
 > **Nota:** Los tests usan SQLite in-memory — no requieren PostgreSQL ni Redis.
+> **Limitación conocida:** SQLite no valida todas las restricciones de PostgreSQL (ej.: NOT NULL en ciertas operaciones).
+> Al agregar lógica nueva que toque la BD, verificar también con el entorno Docker completo.
+
+---
+
+## Plan de Hardening — Fase 5 (Hacia Producción)
+
+El informe `informe-prd-arquitectura-SAPI.md` identificó las brechas entre el PRD/arquitectura y la implementación actual.
+El siguiente plan ordena el trabajo por **criticidad y dependencias**, de modo que cada sprint deja el sistema en un estado funcional y más seguro que el anterior.
+
+> **Convención de estado:**
+> - `[ ]` Pendiente — `[~]` En progreso — `[x]` Completado
+
+---
+
+### Sprint A — Correcciones Urgentes de Código (estimado: 1 sesión)
+
+Fixes puntuales que no requieren diseño previo. Deben hacerse primero porque afectan correctitud y reproducibilidad.
+
+- [ ] **A1. Descomentar `psycopg2-binary` en `requirements.txt`**
+  - Actualmente comentado → instalación local fuera de Docker falla silenciosamente.
+  - Archivo: `sapi_backend/requirements.txt` línea ~8.
+
+- [ ] **A2. Agregar `email-validator` a `requirements.txt`**
+  - Pydantic lo necesita para validar `email`; se instala hoy dinámicamente en Docker Compose.
+  - Agregar: `email-validator==2.1.0` (o la versión compatible con la versión de Pydantic instalada).
+
+- [ ] **A3. Mover `pip install` del comando Docker Compose al Dockerfile**
+  - Los workers instalan paquetes en cada arranque (`pip install pypdf email-validator`).
+  - Mover esos paquetes a `sapi_backend/Dockerfile` con `RUN pip install`.
+  - Esto hace la imagen reproducible y el arranque más rápido.
+
+- [ ] **A4. Eliminar definición duplicada en `schemas/document.py`**
+  - `ExtractedDataUpdate` y `ExtractedDataUpdateList` están definidos dos veces.
+  - Eliminar la primera ocurrencia (líneas ~61-66); dejar solo la segunda.
+
+- [ ] **A5. Activar `secure=True` en cookie del refresh token condicionalmente**
+  - Archivo: `sapi_backend/app/api/v1/endpoints/auth.py`.
+  - Agregar `ENVIRONMENT: str = "development"` a `config.py`.
+  - En `auth.py`: `secure=settings.ENVIRONMENT == "production"`.
+
+- [ ] **A6. Agregar validación de `document_type_id` en upload**
+  - Si el cliente envía un `document_type_id` inexistente, el upload debe retornar 422.
+  - Archivo: `sapi_backend/app/api/v1/endpoints/documents.py` (función `upload_document`).
+
+---
+
+### Sprint B — Seguridad: Autorización por Roles (estimado: 2 sesiones)
+
+La autenticación es correcta, pero la **autorización granular** está ausente en los endpoints de documentos. Cualquier usuario autenticado puede leer y editar documentos de otros usuarios.
+
+- [ ] **B1. Crear dependency `get_document_or_404_owned`**
+  - Archivo: `sapi_backend/app/api/v1/deps.py`.
+  - Nueva función: recibe `document_id` y el usuario actual; retorna el documento si existe y el usuario es propietario o tiene rol `admin` / `document_reviewer`; lanza 403 en caso contrario.
+  - Esta dependency reemplaza el patrón manual `db.query(Document).filter(...)` que se repite en varios endpoints.
+
+- [ ] **B2. Aplicar la dependency en todos los endpoints de documento**
+  - `GET /documents/{id}` — solo propietario, reviewer o admin.
+  - `GET /documents/{id}/data` — solo propietario, reviewer o admin.
+  - `PUT /documents/{id}/data` — solo reviewer o admin (los `user` solo pueden subir).
+  - `GET /documents/{id}/download` — solo propietario, reviewer o admin.
+  - `GET /documents/{id}/preview` — solo propietario, reviewer o admin.
+
+- [ ] **B3. Crear dependency `require_role(*roles)`**
+  - Reutilizable para cualquier endpoint que requiera un rol específico.
+  - Ejemplo: `Depends(require_role("document_reviewer", "admin"))`.
+
+- [ ] **B4. Actualizar tests de autorización**
+  - Agregar casos en `test_documents.py` y `test_documents_extra.py` que verifiquen que un usuario sin permiso recibe 403.
+  - Mantener cobertura al 100%.
+
+---
+
+### Sprint C — Auditoría: Activar AuditLog (estimado: 1 sesión)
+
+El modelo `AuditLog` está completo pero nunca se escribe. Sin trazabilidad no hay cumplimiento ni capacidad de investigar incidentes.
+
+- [ ] **C1. Crear helper `log_action(db, user_id, action, entity_type, entity_id, details, ip_address)`**
+  - Archivo nuevo: `sapi_backend/app/core/audit.py`.
+  - Función simple que crea y hace `db.add()` de un `AuditLog`. No hace commit (el commit lo hace el endpoint llamador).
+
+- [ ] **C2. Registrar acciones en endpoints de documentos**
+  - `POST /documents/` → acción `"document.upload"`.
+  - `PUT /documents/{id}/data` → acción `"document.correct_field"` (una entrada por campo modificado o una por operación).
+  - `DELETE /documents/{id}` (cuando se implemente) → acción `"document.delete"`.
+
+- [ ] **C3. Registrar acciones en endpoints de auth**
+  - `POST /auth/login` → acción `"auth.login"` con IP.
+  - `POST /auth/logout` → acción `"auth.logout"`.
+
+- [ ] **C4. Registrar acciones en endpoints de usuarios (admin)**
+  - `POST /users/` → `"user.create"`.
+  - `PUT /users/{id}` → `"user.update"`.
+  - `DELETE /users/{id}` → `"user.delete"`.
+
+- [ ] **C5. Agregar tests de auditoría**
+  - Verificar que cada acción registrada crea la fila correcta en `AuditLog`.
+
+---
+
+### Sprint D — Funcionalidad Faltante del PRD (estimado: 1 sesión)
+
+Requisitos del PRD marcados como ausentes o parciales en el informe.
+
+- [ ] **D1. Implementar `DELETE /documents/{id}` (RF004)**
+  - Eliminar el documento de la BD, sus `ExtractedData` asociados y el archivo del storage.
+  - Solo propietario o admin puede eliminar.
+  - Registrar en `AuditLog`.
+  - Agregar botón "Eliminar" en `DocumentDetail.tsx` con modal de confirmación.
+
+- [ ] **D2. Agregar filtro por tipo de documento en el Dashboard (RF017)**
+  - Backend: el endpoint `GET /documents/` ya acepta `document_type_id`; verificar que funciona.
+  - Frontend: agregar un `<select>` en el Dashboard para filtrar por tipo (poblar con `listDocumentTypes()`).
+
+- [ ] **D3. Agregar filtro por rango de fechas en listado (RF017)**
+  - Backend: agregar parámetros `date_from` y `date_to` (ISO 8601) al endpoint `GET /documents/`.
+  - Frontend: dos `<input type="date">` en la sección de filtros del Dashboard.
+
+- [ ] **D4. Hacer `GET /users/` devolver `PaginatedResponse`**
+  - Actualmente retorna lista plana sin metadatos. Unificar con el patrón del listado de documentos.
+
+---
+
+### Sprint E — Performance: Consultas y Caché (estimado: 1 sesión)
+
+- [ ] **E1. Corregir N+1 query en `GET /documents/`**
+  - Archivo: `sapi_backend/app/api/v1/endpoints/documents.py`.
+  - Reemplazar el loop que hace una query por documento con `options(joinedload(Document.document_type))` en la query principal.
+  - Verificar con `SQLALCHEMY_ECHO=True` que se genera una sola consulta SQL.
+
+- [ ] **E2. Agregar índices en migración Alembic**
+  - Crear `sapi_backend/alembic/versions/002_add_indexes.py`.
+  - Índices a agregar:
+    - `documents.status`
+    - `documents.upload_user_id`
+    - `documents.created_at`
+    - `(extracted_data.document_id, extracted_data.field_name)` — unique
+    - `audit_logs.user_id`
+    - `audit_logs.entity_id`
+
+- [ ] **E3. Caché de `DocumentType` en Redis**
+  - Los tipos de documento cambian raramente; cachearlos en Redis con TTL de 5 minutos evita queries repetidas.
+  - Archivo: `sapi_backend/app/services/storage_service.py` o un nuevo `cache_service.py`.
+
+---
+
+### Sprint F — Infraestructura: HTTPS y Operacional (estimado: 2 sesiones)
+
+- [ ] **F1. Configurar HTTPS en Nginx**
+  - Agregar servidor `listen 443 ssl` en `nginx/conf.d/default.conf`.
+  - Para desarrollo local: certificado autofirmado con `openssl req -x509 ...`.
+  - Para producción: integrar Let's Encrypt (Certbot) o configurar variables `SSL_CERT_PATH` / `SSL_KEY_PATH`.
+  - Redirigir HTTP → HTTPS con `return 301 https://...`.
+  - Actualizar `docker-compose.yml` para exponer puerto 443.
+
+- [ ] **F2. Configurar backups automáticos de PostgreSQL**
+  - Agregar un servicio `db_backup` en `docker-compose.yml` con imagen `postgres:15`.
+  - Script: `pg_dump` diario guardado en volumen `./backups/`.
+  - Retención: 7 copias (rotar con `find ./backups -mtime +7 -delete`).
+
+- [ ] **F3. Corregir healthcheck de `celery_beat`**
+  - El healthcheck actual es frágil (busca proceso por cmdline).
+  - Usar `celery inspect ping` que es el mecanismo oficial.
+
+- [ ] **F4. Agregar variables de entorno para producción en `.env.example`**
+  - `ENVIRONMENT=production`
+  - `SSL_CERT_PATH`, `SSL_KEY_PATH`
+  - `ALLOWED_ORIGINS` con dominio real
+  - Documentar cada variable con comentario.
+
+- [ ] **F5. Configurar logs estructurados (JSON)**
+  - Agregar `python-json-logger` a `requirements.txt`.
+  - Configurar en `main.py` para que los logs del backend sean JSON con campos `timestamp`, `level`, `logger`, `message`.
+  - Facilita la ingestión en herramientas como Loki, Datadog o CloudWatch.
+
+---
+
+### Sprint G — Monitoreo y Observabilidad (estimado: 1 sesión)
+
+- [ ] **G1. Exponer métricas Prometheus en el backend**
+  - Agregar `prometheus-fastapi-instrumentator` a `requirements.txt`.
+  - En `main.py`: `Instrumentator().instrument(app).expose(app, endpoint="/metrics")`.
+  - Métricas automáticas: latencia de endpoints, tasa de errores, requests en vuelo.
+
+- [ ] **G2. Agregar `docker-compose.monitoring.yml` con Prometheus + Grafana**
+  - Servicios: `prometheus` (puerto 9090) y `grafana` (puerto 3001).
+  - Dashboard predefinido para FastAPI y Celery.
+  - Opcional: Flower para monitoreo de colas Celery.
+
+- [ ] **G3. Alertas básicas**
+  - Alerta si `process_document_task` tiene tasa de error > 10% en 5 minutos.
+  - Alerta si la cola `ai_processing` supera 50 mensajes sin procesar.
+
+---
+
+### Sprint H — Tests de Integración y Frontend (estimado: 2 sesiones)
+
+- [ ] **H1. Agregar fixture de PostgreSQL real en `conftest.py`**
+  - Agregar un perfil de tests con `pytest-docker` o instrucciones para levantar PostgreSQL antes de correr tests de integración.
+  - Marcar con `@pytest.mark.integration` los tests que requieren PostgreSQL real.
+  - Objetivo: capturar constraint violations y comportamientos específicos de Postgres que SQLite no reproduce.
+
+- [ ] **H2. Tests de carga con Locust**
+  - Archivo: `sapi_backend/locustfile.py`.
+  - Escenarios: carga simultánea de 10 documentos, 50 usuarios consultando el listado.
+  - Meta: verificar que la API responde en <500ms con 50 usuarios concurrentes.
+
+- [ ] **H3. Tests de frontend con Vitest + React Testing Library**
+  - Directorio: `sapi_frontend/src/__tests__/`.
+  - Prioridad: `Dashboard.tsx` (upload, filtros, paginación) y `DocumentDetail.tsx` (edición HIL, guardado).
+  - Meta: cobertura >80% del frontend.
+
+- [ ] **H4. Extraer lógica de fetching a custom hooks**
+  - `sapi_frontend/src/hooks/useDocumentList.ts`
+  - `sapi_frontend/src/hooks/useDocumentDetail.ts`
+  - `sapi_frontend/src/hooks/useDocumentUpload.ts`
+  - Separación de responsabilidades; facilita los tests H3.
+
+---
+
+### Sprint I — Migración y Deuda Técnica (estimado: 2 sesiones)
+
+- [ ] **I1. Migrar `google.generativeai` a `google.genai`**
+  - La librería `google-generativeai` está deprecada (FutureWarning en cada arranque).
+  - Actualizar `requirements.txt` y refactorizar `ai_service.py` a la nueva API.
+  - Los tests de `test_gemini_service.py` deben actualizarse en consecuencia.
+
+- [ ] **I2. Implementar Repository Pattern en `app/crud/`**
+  - Crear `CRUDDocument`, `CRUDExtractedData`, `CRUDUser` con operaciones comunes.
+  - Mover la lógica de BD de `documents.py`, `users.py` a las clases CRUD.
+  - Permite testear la lógica de negocio sin pasar por la capa HTTP.
+
+- [ ] **I3. Implementar Circuit Breaker para Gemini API**
+  - Agregar `tenacity` a `requirements.txt`.
+  - En `ai_service.py`: si Gemini falla 3 veces consecutivas, abrir el circuito y retornar fallback durante 2 minutos sin llamar a la API.
+  - Previene saturar la API de Google y acumular reintentos en cola.
+
+- [ ] **I4. Agregar backoff exponencial en reintentos de Celery**
+  - Actualmente `default_retry_delay=60` (fijo).
+  - Cambiar a: `countdown = 60 * (2 ** self.request.retries)` → 60s, 120s, 240s.
+
+---
+
+### Sprint J — Cumplimiento Normativo GDPR (estimado: 1 sesión)
+
+Requerido si el sistema maneja datos de ciudadanos de la UE.
+
+- [ ] **J1. Endpoint de exportación de datos del usuario**
+  - `GET /users/me/export` → retorna JSON con todos los documentos y campos extraídos del usuario.
+
+- [ ] **J2. Endpoint de eliminación completa (derecho al olvido)**
+  - `DELETE /users/me` → elimina usuario, sus documentos, campos extraídos, audit logs y archivos del storage.
+  - Requiere confirmación con contraseña actual.
+
+- [ ] **J3. Cifrado en reposo**
+  - PostgreSQL: configurar `pgcrypto` o usar cifrado a nivel de disco en el servidor.
+  - S3: activar SSE-S3 o SSE-KMS en el bucket.
+  - Documentar configuración en `.env.example`.
+
+---
+
+## Orden Recomendado de Ejecución
+
+```
+Sprint A  →  Sprint B  →  Sprint C  →  Sprint D
+(fixes)      (authz)      (audit)      (funcional faltante)
+    │                                       │
+    └───────────────────────────────────────┘
+                        │
+                        ▼
+Sprint E  →  Sprint F  →  Sprint G
+(perf)       (HTTPS+ops)  (monitoring)
+    │
+    └───────────────────────────────────────────┐
+                                                │
+                                                ▼
+                                    Sprint H  →  Sprint I  →  Sprint J
+                                    (tests)      (deuda)       (GDPR)
+```
+
+> Los sprints A–D son **prerrequisito para producción**.
+> Los sprints E–G son **fuertemente recomendados**.
+> Los sprints H–J son **mejoras de calidad y cumplimiento**.
+
+---
+
+## Bugs Conocidos (No Bloqueantes en Dev, Bloqueantes en Prod)
+
+| ID | Archivo | Descripción | Sprint |
+|----|---------|-------------|--------|
+| BUG-001 | `documents.py` | N+1 query en `GET /documents/` (1 query por documento para obtener el tipo) | E1 |
+| BUG-002 | `auth.py` | `secure=False` en cookie del refresh token | A5 |
+| BUG-003 | `requirements.txt` | `psycopg2-binary` comentado; `email-validator` ausente | A1/A2 |
+| BUG-004 | `document.py` (schema) | `ExtractedDataUpdate` definido dos veces | A4 |
+| BUG-005 | `documents.py` | `document_type_id` no se valida que exista en BD al hacer upload | A6 |
+| BUG-006 | `users.py` | `GET /users/` retorna lista plana, no `PaginatedResponse` | D4 |
+| BUG-007 | `docker-compose.yml` | `celery_beat` arranca pero no tiene tareas programadas definidas | F3 |
+| BUG-008 | `docker-compose.yml` | Paquetes instalados en runtime en lugar de en la imagen Docker | A3 |
+
+---
+
+## Criterio de "Listo para Producción"
+
+El MVP se considera listo para producción cuando:
+
+- [x] Procesamiento IA funcional end-to-end (imágenes + PDFs)
+- [x] Autenticación JWT con refresh tokens
+- [x] Human-in-the-Loop implementado
+- [x] Cobertura de tests backend 100%
+- [ ] Autorización por roles en endpoints de documentos (Sprint B)
+- [ ] AuditLog activo (Sprint C)
+- [ ] `DELETE /documents/{id}` implementado (Sprint D)
+- [ ] HTTPS configurado en Nginx (Sprint F1)
+- [ ] Backups automáticos de PostgreSQL (Sprint F2)
+- [ ] Logs estructurados en JSON (Sprint F5)
+- [ ] Al menos un dashboard de monitoreo operativo (Sprint G)
+- [ ] Tests de integración con PostgreSQL real (Sprint H1)
+
+---
+
+## Notas para Claude Code
+
+- Al implementar cualquier sprint, mantener la cobertura de tests al 100% en backend.
+- Cada sprint debe terminar con un commit siguiendo el formato `tipo(scope): descripción` en español.
+- Antes de tocar `documents.py`, leer también `deps.py` — los cambios de autorización van principalmente ahí.
+- Los cambios en modelos de BD requieren una nueva migración Alembic (`alembic revision --autogenerate -m "descripción"`).
+- Al agregar endpoints nuevos, agregar también el test correspondiente antes de hacer el commit.
+- Para probar HTTPS localmente, el certificado autofirmado causará advertencia en el navegador; es esperado.
+- Al migrar de `google.generativeai` a `google.genai` (Sprint I1), revisar que todos los mocks en `test_gemini_service.py` se actualicen correctamente.
