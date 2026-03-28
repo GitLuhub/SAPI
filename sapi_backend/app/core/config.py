@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     PROJECT_NAME: str = "SAPI"
     VERSION: str = "1.0.0"
     API_V1_STR: str = "/api/v1"
+    ENVIRONMENT: str = "development"  # "production" activa secure cookies y HTTPS
     
     SECRET_KEY: str
     ALGORITHM: str = "HS256"

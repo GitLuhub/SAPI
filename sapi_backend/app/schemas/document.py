@@ -58,14 +58,6 @@ class ExtractedFieldResponse(BaseModel):
     is_corrected: bool
     corrected_at: Optional[datetime] = None
 
-class ExtractedDataUpdate(BaseModel):
-    field_name: str
-    new_value: str
-
-class ExtractedDataUpdateList(BaseModel):
-    updates: List[ExtractedDataUpdate]
-
-
 class DocumentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     

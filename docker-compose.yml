@@ -63,8 +63,7 @@ services:
       - sapi_network
     restart: unless-stopped
     command: >
-      sh -c "pip install email-validator==2.1.0.post1 bcrypt==4.0.1 psycopg2-binary==2.9.9
-      && alembic upgrade head
+      sh -c "alembic upgrade head
       && PYTHONPATH=/app python /app/scripts/create_initial_data.py
       && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     healthcheck:
@@ -125,7 +124,7 @@ services:
       dockerfile: Dockerfile
     container_name: sapi_ai_worker
     command: >
-      sh -c "pip install email-validator==2.1.0.post1 bcrypt==4.0.1 psycopg2-binary==2.9.9 && celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2 -Q ai_processing"
+      sh -c "celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2 -Q ai_processing"
     env_file:
       - .env
     environment:
@@ -158,7 +157,7 @@ services:
       dockerfile: Dockerfile
     container_name: sapi_notification_worker
     command: >
-      sh -c "pip install email-validator==2.1.0.post1 bcrypt==4.0.1 psycopg2-binary==2.9.9 && celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2 -Q notifications"
+      sh -c "celery -A app.tasks.celery_app worker --loglevel=info --concurrency=2 -Q notifications"
     env_file:
       - .env
     environment:
@@ -190,7 +189,7 @@ services:
       dockerfile: Dockerfile
     container_name: sapi_celery_beat
     command: >
-      sh -c "pip install email-validator==2.1.0.post1 bcrypt==4.0.1 psycopg2-binary==2.9.9 && celery -A app.tasks.celery_app beat --loglevel=info"
+      sh -c "celery -A app.tasks.celery_app beat --loglevel=info"
     env_file:
       - .env
     environment:

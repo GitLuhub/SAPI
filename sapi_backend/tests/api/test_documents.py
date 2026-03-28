@@ -98,6 +98,21 @@ def test_upload_unauthenticated(client: TestClient):
     assert response.status_code == 401
 
 
+@patch("app.api.v1.endpoints.documents.MessageBrokerService")
+@patch("app.api.v1.endpoints.documents.StorageService.upload_file", new_callable=AsyncMock)
+def test_upload_invalid_document_type_id(mock_upload, mock_broker, client: TestClient, db_session: Session):
+    """Uploading with a non-existent document_type_id returns 422."""
+    user = setup_user(db_session, username="docuser_dtype")
+    token = create_test_token(user)
+    fake_id = str(uuid.uuid4())
+    response = client.post(
+        f"/api/v1/documents/?document_type_id={fake_id}",
+        files={"file": ("test.pdf", b"%PDF-1.4", "application/pdf")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert response.status_code == 422
+
+
 # ---------------------------------------------------------------------------
 # List
 # ---------------------------------------------------------------------------

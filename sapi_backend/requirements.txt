@@ -5,7 +5,7 @@ pydantic-settings
 email-validator
 
 sqlalchemy
-# psycopg2-binary
+psycopg2-binary
 alembic
 
 python-jose[cryptography]

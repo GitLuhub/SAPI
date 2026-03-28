@@ -106,7 +106,14 @@ async def upload_document(
     current_user: User = Depends(get_current_user)
 ) -> DocumentStatusResponse:
     validate_file(file)
-    
+
+    if document_type_id is not None:
+        if not db.query(DocumentType).filter(DocumentType.id == document_type_id, DocumentType.is_active == True).first():
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=f"Document type '{document_type_id}' not found or inactive",
+            )
+
     content = await file.read()
     file_size = len(content)
     
