@@ -217,7 +217,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | **Fase 1** — Backend Core | ✅ Completa | JWT auth + refresh, CRUD documentos, storage S3/local, modelos DB |
 | **Fase 2** — IA/Workers | ✅ Completa | Gemini integrado, Celery con reintentos, extracción de entidades |
 | **Fase 3** — Frontend | ✅ Completa | Login, Dashboard, DocumentDetail, upload, corrección HIL, PDF viewer |
-| **Fase 4** — Testing | ✅ Completa | 156 tests, cobertura 100% backend (pytest --cov --fail-under=80) |
+| **Fase 4** — Testing | ✅ Completa | 190 tests, cobertura 100% backend (pytest --cov --fail-under=80) |
 | **Fase 5** — Hardening | 🔄 En curso | Ver plan de producción más abajo |
 
 ---
@@ -229,7 +229,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | Precisión clasificación IA | >90% | ✅ Verificado en producción (0.95–0.99) |
 | Tiempo procesamiento | <30s/documento | ❓ Sin medir formalmente |
 | Tiempo respuesta API | <500ms | ❓ Sin medir formalmente |
-| Cobertura de tests (backend) | 100% | ✅ 156 tests |
+| Cobertura de tests (backend) | 100% | ✅ 190 tests |
 | Cobertura de tests (frontend) | >80% | ❌ 0% (sin tests) |
 | Reducción trabajo manual | -70% | ❓ Sin medir |
 | Volumen objetivo | 10 000 docs/mes | ❓ Sin test de carga |
@@ -407,26 +407,21 @@ Requisitos del PRD marcados como ausentes o parciales en el informe.
 
 ---
 
-### Sprint E — Performance: Consultas y Caché (estimado: 1 sesión)
+### Sprint E — Performance: Consultas y Caché ✅ COMPLETO
 
-- [ ] **E1. Corregir N+1 query en `GET /documents/`**
+- [x] **E1. Corregir N+1 query en `GET /documents/`**
   - Archivo: `sapi_backend/app/api/v1/endpoints/documents.py`.
   - Reemplazar el loop que hace una query por documento con `options(joinedload(Document.document_type))` en la query principal.
   - Verificar con `SQLALCHEMY_ECHO=True` que se genera una sola consulta SQL.
 
-- [ ] **E2. Agregar índices en migración Alembic**
-  - Crear `sapi_backend/alembic/versions/002_add_indexes.py`.
-  - Índices a agregar:
-    - `documents.status`
-    - `documents.upload_user_id`
-    - `documents.created_at`
-    - `(extracted_data.document_id, extracted_data.field_name)` — unique
-    - `audit_logs.user_id`
-    - `audit_logs.entity_id`
+- [x] **E2. Agregar índices en migración Alembic**
+  - Creado `sapi_backend/alembic/versions/002_add_indexes.py`.
+  - Índices agregados: `documents.created_at`, `(extracted_data.document_id, field_name)` UNIQUE, `audit_logs.entity_id`, `audit_logs.action`.
 
-- [ ] **E3. Caché de `DocumentType` en Redis**
-  - Los tipos de documento cambian raramente; cachearlos en Redis con TTL de 5 minutos evita queries repetidas.
-  - Archivo: `sapi_backend/app/services/storage_service.py` o un nuevo `cache_service.py`.
+- [x] **E3. Caché de `DocumentType` en Redis**
+  - Creado `sapi_backend/app/services/cache_service.py` con `CacheService` (graceful degradation).
+  - `GET /documents/types/` usa cache-aside con TTL 5 min.
+  - 18 tests unitarios + 1 test de cache-hit en endpoint.
 
 ---
 
