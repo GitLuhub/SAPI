@@ -303,29 +303,29 @@ El siguiente plan ordena el trabajo por **criticidad y dependencias**, de modo q
 
 Fixes puntuales que no requieren diseño previo. Deben hacerse primero porque afectan correctitud y reproducibilidad.
 
-- [ ] **A1. Descomentar `psycopg2-binary` en `requirements.txt`**
+- [x] **A1. Descomentar `psycopg2-binary` en `requirements.txt`**
   - Actualmente comentado → instalación local fuera de Docker falla silenciosamente.
   - Archivo: `sapi_backend/requirements.txt` línea ~8.
 
-- [ ] **A2. Agregar `email-validator` a `requirements.txt`**
+- [x] **A2. Agregar `email-validator` a `requirements.txt`**
   - Pydantic lo necesita para validar `email`; se instala hoy dinámicamente en Docker Compose.
   - Agregar: `email-validator==2.1.0` (o la versión compatible con la versión de Pydantic instalada).
 
-- [ ] **A3. Mover `pip install` del comando Docker Compose al Dockerfile**
+- [x] **A3. Mover `pip install` del comando Docker Compose al Dockerfile**
   - Los workers instalan paquetes en cada arranque (`pip install pypdf email-validator`).
   - Mover esos paquetes a `sapi_backend/Dockerfile` con `RUN pip install`.
   - Esto hace la imagen reproducible y el arranque más rápido.
 
-- [ ] **A4. Eliminar definición duplicada en `schemas/document.py`**
+- [x] **A4. Eliminar definición duplicada en `schemas/document.py`**
   - `ExtractedDataUpdate` y `ExtractedDataUpdateList` están definidos dos veces.
   - Eliminar la primera ocurrencia (líneas ~61-66); dejar solo la segunda.
 
-- [ ] **A5. Activar `secure=True` en cookie del refresh token condicionalmente**
+- [x] **A5. Activar `secure=True` en cookie del refresh token condicionalmente**
   - Archivo: `sapi_backend/app/api/v1/endpoints/auth.py`.
   - Agregar `ENVIRONMENT: str = "development"` a `config.py`.
   - En `auth.py`: `secure=settings.ENVIRONMENT == "production"`.
 
-- [ ] **A6. Agregar validación de `document_type_id` en upload**
+- [x] **A6. Agregar validación de `document_type_id` en upload**
   - Si el cliente envía un `document_type_id` inexistente, el upload debe retornar 422.
   - Archivo: `sapi_backend/app/api/v1/endpoints/documents.py` (función `upload_document`).
 
@@ -335,23 +335,23 @@ Fixes puntuales que no requieren diseño previo. Deben hacerse primero porque af
 
 La autenticación es correcta, pero la **autorización granular** está ausente en los endpoints de documentos. Cualquier usuario autenticado puede leer y editar documentos de otros usuarios.
 
-- [ ] **B1. Crear dependency `get_document_or_404_owned`**
+- [x] **B1. Crear dependency `get_document_or_404_owned`**
   - Archivo: `sapi_backend/app/api/v1/deps.py`.
   - Nueva función: recibe `document_id` y el usuario actual; retorna el documento si existe y el usuario es propietario o tiene rol `admin` / `document_reviewer`; lanza 403 en caso contrario.
   - Esta dependency reemplaza el patrón manual `db.query(Document).filter(...)` que se repite en varios endpoints.
 
-- [ ] **B2. Aplicar la dependency en todos los endpoints de documento**
+- [x] **B2. Aplicar la dependency en todos los endpoints de documento**
   - `GET /documents/{id}` — solo propietario, reviewer o admin.
   - `GET /documents/{id}/data` — solo propietario, reviewer o admin.
   - `PUT /documents/{id}/data` — solo reviewer o admin (los `user` solo pueden subir).
   - `GET /documents/{id}/download` — solo propietario, reviewer o admin.
   - `GET /documents/{id}/preview` — solo propietario, reviewer o admin.
 
-- [ ] **B3. Crear dependency `require_role(*roles)`**
+- [x] **B3. Crear dependency `require_role(*roles)`**
   - Reutilizable para cualquier endpoint que requiera un rol específico.
   - Ejemplo: `Depends(require_role("document_reviewer", "admin"))`.
 
-- [ ] **B4. Actualizar tests de autorización**
+- [x] **B4. Actualizar tests de autorización**
   - Agregar casos en `test_documents.py` y `test_documents_extra.py` que verifiquen que un usuario sin permiso recibe 403.
   - Mantener cobertura al 100%.
 
@@ -361,25 +361,25 @@ La autenticación es correcta, pero la **autorización granular** está ausente 
 
 El modelo `AuditLog` está completo pero nunca se escribe. Sin trazabilidad no hay cumplimiento ni capacidad de investigar incidentes.
 
-- [ ] **C1. Crear helper `log_action(db, user_id, action, entity_type, entity_id, details, ip_address)`**
+- [x] **C1. Crear helper `log_action(db, user_id, action, entity_type, entity_id, details, ip_address)`**
   - Archivo nuevo: `sapi_backend/app/core/audit.py`.
   - Función simple que crea y hace `db.add()` de un `AuditLog`. No hace commit (el commit lo hace el endpoint llamador).
 
-- [ ] **C2. Registrar acciones en endpoints de documentos**
+- [x] **C2. Registrar acciones en endpoints de documentos**
   - `POST /documents/` → acción `"document.upload"`.
   - `PUT /documents/{id}/data` → acción `"document.correct_field"` (una entrada por campo modificado o una por operación).
   - `DELETE /documents/{id}` (cuando se implemente) → acción `"document.delete"`.
 
-- [ ] **C3. Registrar acciones en endpoints de auth**
+- [x] **C3. Registrar acciones en endpoints de auth**
   - `POST /auth/login` → acción `"auth.login"` con IP.
   - `POST /auth/logout` → acción `"auth.logout"`.
 
-- [ ] **C4. Registrar acciones en endpoints de usuarios (admin)**
+- [x] **C4. Registrar acciones en endpoints de usuarios (admin)**
   - `POST /users/` → `"user.create"`.
   - `PUT /users/{id}` → `"user.update"`.
   - `DELETE /users/{id}` → `"user.delete"`.
 
-- [ ] **C5. Agregar tests de auditoría**
+- [x] **C5. Agregar tests de auditoría**
   - Verificar que cada acción registrada crea la fila correcta en `AuditLog`.
 
 ---
@@ -388,21 +388,21 @@ El modelo `AuditLog` está completo pero nunca se escribe. Sin trazabilidad no h
 
 Requisitos del PRD marcados como ausentes o parciales en el informe.
 
-- [ ] **D1. Implementar `DELETE /documents/{id}` (RF004)**
+- [x] **D1. Implementar `DELETE /documents/{id}` (RF004)**
   - Eliminar el documento de la BD, sus `ExtractedData` asociados y el archivo del storage.
   - Solo propietario o admin puede eliminar.
   - Registrar en `AuditLog`.
   - Agregar botón "Eliminar" en `DocumentDetail.tsx` con modal de confirmación.
 
-- [ ] **D2. Agregar filtro por tipo de documento en el Dashboard (RF017)**
+- [x] **D2. Agregar filtro por tipo de documento en el Dashboard (RF017)**
   - Backend: el endpoint `GET /documents/` ya acepta `document_type_id`; verificar que funciona.
   - Frontend: agregar un `<select>` en el Dashboard para filtrar por tipo (poblar con `listDocumentTypes()`).
 
-- [ ] **D3. Agregar filtro por rango de fechas en listado (RF017)**
+- [x] **D3. Agregar filtro por rango de fechas en listado (RF017)**
   - Backend: agregar parámetros `date_from` y `date_to` (ISO 8601) al endpoint `GET /documents/`.
   - Frontend: dos `<input type="date">` en la sección de filtros del Dashboard.
 
-- [ ] **D4. Hacer `GET /users/` devolver `PaginatedResponse`**
+- [x] **D4. Hacer `GET /users/` devolver `PaginatedResponse`**
   - Actualmente retorna lista plana sin metadatos. Unificar con el patrón del listado de documentos.
 
 ---
@@ -548,8 +548,8 @@ Requerido si el sistema maneja datos de ciudadanos de la UE.
 ## Orden Recomendado de Ejecución
 
 ```
-Sprint A  →  Sprint B  →  Sprint C  →  Sprint D
-(fixes)      (authz)      (audit)      (funcional faltante)
+Sprint A ✅ →  Sprint B ✅ →  Sprint C ✅ →  Sprint D ✅
+(fixes)       (authz)       (audit)       (funcional faltante)
     │                                       │
     └───────────────────────────────────────┘
                         │
