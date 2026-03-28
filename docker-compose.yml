@@ -63,7 +63,10 @@ services:
       - sapi_network
     restart: unless-stopped
     command: >
-      sh -c "pip install email-validator==2.1.0.post1 bcrypt==4.0.1 psycopg2-binary==2.9.9 && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+      sh -c "pip install email-validator==2.1.0.post1 bcrypt==4.0.1 psycopg2-binary==2.9.9
+      && alembic upgrade head
+      && PYTHONPATH=/app python /app/scripts/create_initial_data.py
+      && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
       interval: 30s
@@ -139,6 +142,12 @@ services:
     networks:
       - sapi_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 3 > /dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # ----------------------------------------
   # Notification Worker (Celery Worker)
@@ -165,6 +174,12 @@ services:
     networks:
       - sapi_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "celery -A app.tasks.celery_app inspect ping -d celery@$$HOSTNAME --timeout 3 > /dev/null 2>&1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # ----------------------------------------
   # Celery Beat (Scheduler)
@@ -191,6 +206,12 @@ services:
     networks:
       - sapi_network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "python3 -c \"import sys; d=open('/proc/1/cmdline','rb').read(); sys.exit(0 if b'celery' in d else 1)\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
 
 # ----------------------------------------
 # Volumes for data persistence
