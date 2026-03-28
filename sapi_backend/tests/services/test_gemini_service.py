@@ -164,3 +164,35 @@ def test_parse_json_markdown_wrapper(mock_genai):
     doc_type, confidence = service.classify_document("invoice text")
     assert doc_type == "Factura de Proveedor"
     assert confidence == "0.9"
+
+
+# ---------------------------------------------------------------------------
+# _parse_json_response — fully unparseable JSON (lines 56-59)
+# ---------------------------------------------------------------------------
+
+@patch("app.services.ai_service.genai")
+def test_parse_json_response_invalid_raises_value_error(mock_genai):
+    """Both JSON parse attempts fail → ValueError raised (lines 56-59)."""
+    mock_model = MagicMock()
+    mock_model.generate_content.return_value.text = "this is definitely not json at all!!!"
+    mock_genai.GenerativeModel.return_value = mock_model
+
+    service = GeminiAIService()
+    # classify_document catches ValueError and returns fallback
+    doc_type, confidence = service.classify_document("text")
+    assert doc_type == "Factura de Proveedor"
+    assert confidence == "0.50"
+
+
+# ---------------------------------------------------------------------------
+# _call_gemini — no client configured (line 63)
+# ---------------------------------------------------------------------------
+
+def test_call_gemini_no_client_raises_runtime_error():
+    """_call_gemini raises RuntimeError when client is None (line 63)."""
+    with patch("app.services.ai_service.settings") as mock_settings:
+        mock_settings.GEMINI_API_KEY = None
+        service = GeminiAIService()
+
+    with pytest.raises(RuntimeError, match="not configured"):
+        service._call_gemini("any prompt")

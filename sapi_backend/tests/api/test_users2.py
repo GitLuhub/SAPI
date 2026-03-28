@@ -152,3 +152,37 @@ def test_delete_user_not_found(client: TestClient, db_session: Session):
     token = create_test_token(admin)
     response = client.delete(f"/api/v1/users/{uuid.uuid4()}", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# PUT /users/{user_id} — update with password and role (lines 98, 101)
+# ---------------------------------------------------------------------------
+
+def test_update_user_password(client: TestClient, db_session: Session):
+    """PUT with password field triggers hashing (line 98)."""
+    admin = make_admin(db_session, username="admin_pwd", email="admin_pwd@test.com")
+    target = make_regular_user(db_session, username="target_pwd", email="target_pwd@test.com")
+    token = create_test_token(admin)
+    response = client.put(
+        f"/api/v1/users/{target.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"password": "newSecurePass123"},
+    )
+    assert response.status_code == 200
+    # Verify password was actually changed (hashed_password should differ from plaintext)
+    db_session.refresh(target)
+    assert target.hashed_password != "newSecurePass123"
+
+
+def test_update_user_role(client: TestClient, db_session: Session):
+    """PUT with role field triggers role.value extraction (line 101)."""
+    admin = make_admin(db_session, username="admin_role", email="admin_role@test.com")
+    target = make_regular_user(db_session, username="target_role", email="target_role@test.com")
+    token = create_test_token(admin)
+    response = client.put(
+        f"/api/v1/users/{target.id}",
+        headers={"Authorization": f"Bearer {token}"},
+        json={"role": "document_reviewer"},
+    )
+    assert response.status_code == 200
+    assert response.json()["role"] == "document_reviewer"

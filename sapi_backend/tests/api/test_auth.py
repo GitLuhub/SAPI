@@ -68,6 +68,12 @@ def test_login_json_invalid(client: TestClient, db_session: Session):
     assert response.status_code == 401
 
 
+def test_login_json_inactive_user(client: TestClient, db_session: Session):
+    make_user(db_session, is_active=False)
+    response = client.post("/api/v1/auth/login/json", json={"username": "testuser", "password": "password123"})
+    assert response.status_code == 400
+
+
 # ---------------------------------------------------------------------------
 # Register
 # ---------------------------------------------------------------------------

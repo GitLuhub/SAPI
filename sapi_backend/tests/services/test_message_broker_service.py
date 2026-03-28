@@ -69,3 +69,13 @@ def test_publish_notification_send_task_raises():
     broker.celery_app.send_task.side_effect = Exception("timeout")
     result = broker.publish_notification("doc-id", "user-id", "PROCESSED")
     assert result is False
+
+
+# ---------------------------------------------------------------------------
+# __init__ — Celery initialization failure (lines 33-35)
+# ---------------------------------------------------------------------------
+
+def test_broker_init_celery_failure():
+    """When Celery() raises during __init__, celery_app is set to None."""
+    broker = make_broker(celery_ok=False)
+    assert broker.celery_app is None

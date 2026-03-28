@@ -68,6 +68,18 @@ def test_smtp_provider_sends_via_tls():
     mock_server.send_message.assert_called_once()
 
 
+def test_smtp_send_with_html_body():
+    """html_body triggers msg.add_alternative (line 33)."""
+    svc = make_service("SMTP")
+    mock_server = MagicMock()
+    with patch("smtplib.SMTP", return_value=mock_server):
+        result = svc.send_email(
+            "user@example.com", "Subject", "Plain body", html_body="<b>HTML body</b>"
+        )
+    assert result is True
+    mock_server.send_message.assert_called_once()
+
+
 def test_smtp_provider_fallback_ssl():
     svc = make_service("SMTP")
     mock_ssl_server = MagicMock()

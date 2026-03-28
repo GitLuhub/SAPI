@@ -76,3 +76,20 @@ def test_send_notification_task_document_not_found(db_session: Session):
 
     assert result["status"] == "skipped"
     assert "Document" in result["reason"]
+
+
+# ---------------------------------------------------------------------------
+# Exception in send_email (lines 79-81)
+# ---------------------------------------------------------------------------
+
+def test_send_notification_task_email_exception(db_session: Session):
+    """When send_email raises, the except block catches and returns error status."""
+    user, doc = _setup(db_session)
+    with patch("app.tasks.notification_tasks.SessionLocal", return_value=db_session):
+        db_session.close = MagicMock()
+        with patch("app.tasks.notification_tasks.notification_service") as mock_notif:
+            mock_notif.send_email.side_effect = Exception("SMTP unavailable")
+            result = send_notification_task(str(doc.id), str(user.id), "PROCESSED")
+
+    assert result["status"] == "error"
+    assert "SMTP unavailable" in result["message"]
