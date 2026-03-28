@@ -169,9 +169,9 @@ Responde SOLO con JSON en este formato:
                         (label for name, label in fields if name == f.get("nombre")),
                         f.get("nombre", "")
                     ),
-                    "ai_extracted_value": f.get("valor", ""),
+                    "ai_extracted_value": f.get("valor") or "",
                     "ai_confidence": str(f.get("confianza", 0.75)),
-                    "final_value": f.get("valor", ""),
+                    "final_value": f.get("valor") or "",
                 }
                 for f in fields_data
             ]
