@@ -371,3 +371,89 @@ def test_owner_cannot_update_own_document_data(client: TestClient, db_session: S
         headers={"Authorization": f"Bearer {token_for(owner)}"},
     )
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# DELETE /documents/{id} — Sprint D1
+# ---------------------------------------------------------------------------
+
+@patch("app.api.v1.endpoints.documents.StorageService.delete_file", new_callable=AsyncMock)
+def test_delete_document_owner(mock_delete, client: TestClient, db_session: Session):
+    """Document owner can delete their own document (204)."""
+    owner = make_user(db_session, "del_owner")
+    doc = make_doc(db_session, owner)
+    mock_delete.return_value = None
+
+    resp = client.delete(
+        f"/api/v1/documents/{doc.id}",
+        headers={"Authorization": f"Bearer {token_for(owner)}"},
+    )
+    assert resp.status_code == 204
+
+
+@patch("app.api.v1.endpoints.documents.StorageService.delete_file", new_callable=AsyncMock)
+def test_delete_document_other_user_forbidden(mock_delete, client: TestClient, db_session: Session):
+    """A different plain user cannot delete someone else's document (403)."""
+    owner = make_user(db_session, "del_owner2")
+    other = make_user(db_session, "del_other2")
+    doc = make_doc(db_session, owner)
+
+    resp = client.delete(
+        f"/api/v1/documents/{doc.id}",
+        headers={"Authorization": f"Bearer {token_for(other)}"},
+    )
+    assert resp.status_code == 403
+
+
+def test_delete_document_not_found(client: TestClient, db_session: Session):
+    """Deleting a non-existent document returns 404."""
+    owner = make_user(db_session, "del_nf")
+    resp = client.delete(
+        f"/api/v1/documents/{uuid.uuid4()}",
+        headers={"Authorization": f"Bearer {token_for(owner)}"},
+    )
+    assert resp.status_code == 404
+
+
+@patch("app.api.v1.endpoints.documents.StorageService.delete_file", new_callable=AsyncMock)
+def test_delete_document_storage_error_still_deletes_from_db(mock_delete, client: TestClient, db_session: Session):
+    """If storage deletion fails, document is still removed from the DB."""
+    owner = make_user(db_session, "del_storage_err")
+    doc = make_doc(db_session, owner)
+    mock_delete.side_effect = Exception("Storage unavailable")
+
+    resp = client.delete(
+        f"/api/v1/documents/{doc.id}",
+        headers={"Authorization": f"Bearer {token_for(owner)}"},
+    )
+    assert resp.status_code == 204
+
+
+# ---------------------------------------------------------------------------
+# Date filters in GET /documents/ — Sprint D3
+# ---------------------------------------------------------------------------
+
+def test_list_documents_date_from_filter(client: TestClient, db_session: Session):
+    """date_from filter excludes documents created before that date."""
+    user = make_user(db_session, "date_from_user")
+    make_doc(db_session, user, filename="old.pdf")
+
+    resp = client.get(
+        "/api/v1/documents/?date_from=2099-01-01",
+        headers={"Authorization": f"Bearer {token_for(user)}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0
+
+
+def test_list_documents_date_to_filter(client: TestClient, db_session: Session):
+    """date_to filter excludes documents created after that date."""
+    user = make_user(db_session, "date_to_user")
+    make_doc(db_session, user, filename="recent.pdf")
+
+    resp = client.get(
+        "/api/v1/documents/?date_to=2000-01-01",
+        headers={"Authorization": f"Bearer {token_for(user)}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["total"] == 0

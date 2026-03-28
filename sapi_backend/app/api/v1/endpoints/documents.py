@@ -1,11 +1,11 @@
 import os
 import uuid as uuid_lib
-from datetime import datetime
+from datetime import datetime, date
 from typing import List, Optional, Tuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.core.limiter import limiter
 
@@ -53,48 +53,48 @@ async def list_documents(
     status_filter: Optional[DocumentStatus] = Query(None, alias="status"),
     document_type_id: Optional[UUID] = None,
     search_query: Optional[str] = None,
+    date_from: Optional[date] = Query(None, description="Filter documents uploaded from this date (inclusive)"),
+    date_to: Optional[date] = Query(None, description="Filter documents uploaded up to this date (inclusive)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> PaginatedResponse:
-    query = db.query(Document)
-    
+    query = db.query(Document).options(joinedload(Document.document_type))
+
     if status_filter:
         query = query.filter(Document.status == status_filter.value)
-    
+
     if document_type_id:
         query = query.filter(Document.document_type_id == document_type_id)
-    
+
     if search_query:
-        query = query.filter(
-            Document.original_filename.ilike(f"%{search_query}%")
-        )
-    
+        query = query.filter(Document.original_filename.ilike(f"%{search_query}%"))
+
+    if date_from:
+        query = query.filter(Document.created_at >= datetime.combine(date_from, datetime.min.time()))
+
+    if date_to:
+        query = query.filter(Document.created_at <= datetime.combine(date_to, datetime.max.time()))
+
     total = query.count()
-    
+
     offset = (page - 1) * size
     documents = query.order_by(Document.created_at.desc()).offset(offset).limit(size).all()
-    
-    items = []
-    for doc in documents:
-        doc_type = db.query(DocumentType).filter(DocumentType.id == doc.document_type_id).first()
-        items.append(DocumentListResponse(
+
+    items = [
+        DocumentListResponse(
             id=doc.id,
             original_filename=doc.original_filename,
             status=DocumentStatus(doc.status),
-            document_type_name=doc_type.name if doc_type else None,
+            document_type_name=doc.document_type.name if doc.document_type else None,
             classification_confidence=doc.classification_confidence,
-            created_at=doc.created_at
-        ))
-    
+            created_at=doc.created_at,
+        )
+        for doc in documents
+    ]
+
     pages = (total + size - 1) // size if size > 0 else 0
-    
-    return PaginatedResponse(
-        items=items,
-        total=total,
-        page=page,
-        size=size,
-        pages=pages
-    )
+
+    return PaginatedResponse(items=items, total=total, page=page, size=size, pages=pages)
 
 
 @router.post("/", response_model=DocumentStatusResponse, status_code=status.HTTP_202_ACCEPTED)
@@ -394,6 +394,35 @@ async def preview_document(
         media_type=document.mime_type or "application/octet-stream",
         headers={"Content-Disposition": f'inline; filename="{document.original_filename}"'},
     )
+
+
+@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_document(
+    document_id: UUID,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> None:
+    document = db.query(Document).filter(Document.id == document_id).first()
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    check_document_access(document, current_user)
+
+    storage_service = StorageService()
+    try:
+        await storage_service.delete_file(document.storage_path)
+    except Exception:
+        pass  # No bloquear el borrado de BD si el archivo ya no existe en storage
+
+    log_action(
+        db,
+        action="document.delete",
+        user_id=current_user.id,
+        entity_type="document",
+        entity_id=str(document_id),
+        details=f"filename={document.original_filename}",
+    )
+    db.delete(document)
+    db.commit()
 
 
 @router.get("/types/", response_model=List[DocumentTypeResponse])

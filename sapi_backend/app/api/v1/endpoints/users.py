@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import List
 from uuid import UUID
 
 from app.api.v1.deps import get_db, get_current_user, get_current_superuser
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
+from app.schemas.common import PaginatedResponse
 from app.db.models.user import User
 from app.core.security import get_password_hash
 from app.core.audit import log_action
@@ -61,15 +62,18 @@ async def create_user(
     return user
 
 
-@router.get("/", response_model=List[UserResponse])
+@router.get("/", response_model=PaginatedResponse[UserResponse])
 async def list_users(
-    skip: int = 0,
-    limit: int = 100,
+    page: int = Query(1, ge=1),
+    size: int = Query(20, ge=1, le=100),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_superuser)
-) -> List[User]:
-    users = db.query(User).offset(skip).limit(limit).all()
-    return users
+    current_user: User = Depends(get_current_superuser),
+) -> PaginatedResponse:
+    total = db.query(User).count()
+    offset = (page - 1) * size
+    users = db.query(User).offset(offset).limit(size).all()
+    pages = (total + size - 1) // size if size > 0 else 0
+    return PaginatedResponse(items=users, total=total, page=page, size=size, pages=pages)
 
 
 @router.get("/{user_id}", response_model=UserResponse)

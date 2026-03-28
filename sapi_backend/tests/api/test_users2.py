@@ -49,7 +49,9 @@ def test_get_users_superuser(client: TestClient, db_session: Session):
     token = create_test_token(admin)
     response = client.get("/api/v1/users/", headers={"Authorization": f"Bearer {token}"})
     assert response.status_code == 200
-    assert isinstance(response.json(), list)
+    data = response.json()
+    assert "items" in data
+    assert "total" in data
 
 
 def test_get_users_forbidden_for_regular_user(client: TestClient, db_session: Session):
