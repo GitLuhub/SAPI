@@ -1,0 +1,47 @@
+groups:
+  - name: sapi_backend
+    interval: 1m
+    rules:
+
+      # Alerta: tasa de errores HTTP 5xx > 10% en 5 minutos
+      - alert: HighErrorRate
+        expr: |
+          (
+            sum(rate(http_requests_total{status=~"5.."}[5m]))
+            /
+            sum(rate(http_requests_total[5m]))
+          ) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Alta tasa de errores HTTP en SAPI backend"
+          description: >
+            La tasa de respuestas HTTP 5xx supera el 10% en los últimos 5 minutos.
+            Valor actual: {{ humanizePercentage $value }}
+
+      # Alerta: latencia P95 > 500ms en 5 minutos
+      - alert: HighLatency
+        expr: |
+          histogram_quantile(
+            0.95,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Latencia P95 elevada en SAPI backend"
+          description: >
+            El percentil 95 de latencia supera los 500ms en los últimos 5 minutos.
+            Valor actual: {{ humanizeDuration $value }}
+
+      # Alerta: backend sin instancias activas (scrape fallando)
+      - alert: BackendDown
+        expr: up{job="sapi_backend"} == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "SAPI backend no disponible"
+          description: "Prometheus no puede hacer scrape del backend desde hace {{ $value }} minutos."

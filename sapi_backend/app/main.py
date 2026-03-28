@@ -3,6 +3,7 @@ import sys
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from pythonjsonlogger import jsonlogger
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -54,3 +55,5 @@ async def health_check():
 
 
 app.include_router(api_router, prefix=settings.API_V1_STR)
+
+Instrumentator().instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)

@@ -1,0 +1,65 @@
+# Monitoreo y Observabilidad — overlay para docker-compose.yml
+# Uso: docker-compose -f docker-compose.yml -f docker-compose.monitoring.yml up -d
+#
+# Servicios adicionales:
+#   - Prometheus  → http://localhost:9090
+#   - Grafana     → http://localhost:3001  (admin / admin)
+#   - Flower      → http://localhost:5555  (monitoreo de colas Celery)
+
+version: '3.8'
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: sapi_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/alerts:/etc/prometheus/alerts:ro
+      - prometheus_data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=30d"
+      - "--web.enable-lifecycle"
+    networks:
+      - sapi_network
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: sapi_grafana
+    ports:
+      - "3001:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      - sapi_network
+    restart: unless-stopped
+
+  flower:
+    image: mher/flower:2.0.1
+    container_name: sapi_flower
+    ports:
+      - "5555:5555"
+    environment:
+      CELERY_BROKER_URL: redis://redis:6379/0
+      FLOWER_PORT: 5555
+    depends_on:
+      - redis
+    networks:
+      - sapi_network
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

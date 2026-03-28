@@ -24,6 +24,13 @@ def test_health_check(client: TestClient):
     assert resp.json()["status"] == "healthy"
 
 
+def test_metrics_endpoint(client: TestClient):
+    """GET /metrics expone métricas en formato Prometheus text."""
+    resp = client.get("/metrics")
+    assert resp.status_code == 200
+    assert "http_requests_total" in resp.text
+
+
 # ---------------------------------------------------------------------------
 # validate_file — no filename (documents.py line 35)
 # ---------------------------------------------------------------------------

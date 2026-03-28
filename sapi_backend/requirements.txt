@@ -25,6 +25,7 @@ slowapi
 pypdf
 
 python-json-logger==2.0.7
+prometheus-fastapi-instrumentator==6.1.0
 
 pytest
 pytest-asyncio
