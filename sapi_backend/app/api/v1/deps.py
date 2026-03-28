@@ -1,7 +1,7 @@
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
-from typing import Generator, Optional
+from typing import Callable, Generator, Optional
 from uuid import UUID
 
 from app.core.security import decode_access_token
@@ -72,3 +72,38 @@ def get_current_superuser(
             detail="Not enough permissions"
         )
     return current_user
+
+
+def require_role(*allowed_roles: str) -> Callable:
+    """Dependency factory — raises 403 if user role is not in allowed_roles."""
+    def _check(current_user: User = Depends(get_current_active_user)) -> User:
+        if current_user.is_superuser:
+            return current_user
+        if current_user.role not in allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Not enough permissions",
+            )
+        return current_user
+    return _check
+
+
+def check_document_access(document, current_user: User) -> None:
+    """Raises 403 if current_user is not the document owner, reviewer, or admin."""
+    if current_user.is_superuser or current_user.role in ("admin", "document_reviewer"):
+        return
+    if document.upload_user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not enough permissions",
+        )
+
+
+def check_document_write_access(current_user: User) -> None:
+    """Raises 403 if user cannot correct/edit document fields (needs reviewer or admin)."""
+    if current_user.is_superuser or current_user.role in ("admin", "document_reviewer"):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Not enough permissions",
+    )

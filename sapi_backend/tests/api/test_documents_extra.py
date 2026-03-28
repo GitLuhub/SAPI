@@ -195,7 +195,7 @@ def test_preview_document_not_found(mock_download, client: TestClient, db_sessio
 # ---------------------------------------------------------------------------
 
 def test_update_document_data_creates_new_field(client: TestClient, db_session: Session):
-    user = make_user(db_session, "update_new_field")
+    user = make_user_with_role(db_session, "update_new_field", "document_reviewer")
     tok = token_for(user)
     doc = make_doc(db_session, user, status="REVIEW_NEEDED")
 
@@ -270,3 +270,104 @@ def test_upload_file_too_large(mock_broker, mock_upload, client: TestClient, db_
     )
     assert resp.status_code == 400
     assert "large" in resp.json()["detail"].lower()
+
+
+# ---------------------------------------------------------------------------
+# Authorization — Sprint B
+# ---------------------------------------------------------------------------
+
+def make_user_with_role(db: Session, username: str, role: str) -> User:
+    u = User(
+        username=username,
+        email=f"{username}@auth.com",
+        hashed_password=get_password_hash("pass"),
+        role=role,
+        is_active=True,
+    )
+    db.add(u)
+    db.commit()
+    db.refresh(u)
+    return u
+
+
+def test_other_user_cannot_access_document(client: TestClient, db_session: Session):
+    """A plain user cannot read another user's document — expects 403."""
+    owner = make_user(db_session, "owner_b1")
+    other = make_user(db_session, "other_b1")
+    doc = make_doc(db_session, owner)
+
+    resp = client.get(
+        f"/api/v1/documents/{doc.id}",
+        headers={"Authorization": f"Bearer {token_for(other)}"},
+    )
+    assert resp.status_code == 403
+
+
+def test_reviewer_can_access_any_document(client: TestClient, db_session: Session):
+    """A document_reviewer can read documents uploaded by other users."""
+    owner = make_user(db_session, "owner_b2")
+    reviewer = make_user_with_role(db_session, "reviewer_b2", "document_reviewer")
+    doc = make_doc(db_session, owner)
+
+    resp = client.get(
+        f"/api/v1/documents/{doc.id}",
+        headers={"Authorization": f"Bearer {token_for(reviewer)}"},
+    )
+    assert resp.status_code == 200
+
+
+def test_admin_can_access_any_document(client: TestClient, db_session: Session):
+    """An admin can read documents uploaded by other users."""
+    owner = make_user(db_session, "owner_b3")
+    admin = make_user_with_role(db_session, "admin_b3", "admin")
+    doc = make_doc(db_session, owner)
+
+    resp = client.get(
+        f"/api/v1/documents/{doc.id}",
+        headers={"Authorization": f"Bearer {token_for(admin)}"},
+    )
+    assert resp.status_code == 200
+
+
+def test_plain_user_cannot_update_document_data(client: TestClient, db_session: Session):
+    """A plain user (role=user) cannot correct extracted fields — expects 403."""
+    owner = make_user(db_session, "owner_b4")
+    plain = make_user(db_session, "plain_b4")
+    doc = make_doc(db_session, owner, status="REVIEW_NEEDED")
+
+    payload = {"updates": [{"field_name": "numero_factura", "new_value": "X-001"}]}
+    resp = client.put(
+        f"/api/v1/documents/{doc.id}/data",
+        json=payload,
+        headers={"Authorization": f"Bearer {token_for(plain)}"},
+    )
+    assert resp.status_code == 403
+
+
+def test_reviewer_can_update_document_data(client: TestClient, db_session: Session):
+    """A document_reviewer can correct extracted fields on any document."""
+    owner = make_user(db_session, "owner_b5")
+    reviewer = make_user_with_role(db_session, "reviewer_b5", "document_reviewer")
+    doc = make_doc(db_session, owner, status="REVIEW_NEEDED")
+
+    payload = {"updates": [{"field_name": "numero_factura", "new_value": "F-999"}]}
+    resp = client.put(
+        f"/api/v1/documents/{doc.id}/data",
+        json=payload,
+        headers={"Authorization": f"Bearer {token_for(reviewer)}"},
+    )
+    assert resp.status_code == 200
+
+
+def test_owner_cannot_update_own_document_data(client: TestClient, db_session: Session):
+    """The document owner (role=user) also cannot correct fields — that requires reviewer/admin."""
+    owner = make_user(db_session, "owner_b6")
+    doc = make_doc(db_session, owner, status="REVIEW_NEEDED")
+
+    payload = {"updates": [{"field_name": "numero_factura", "new_value": "F-000"}]}
+    resp = client.put(
+        f"/api/v1/documents/{doc.id}/data",
+        json=payload,
+        headers={"Authorization": f"Bearer {token_for(owner)}"},
+    )
+    assert resp.status_code == 403

@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 
 from app.core.limiter import limiter
 
-from app.api.v1.deps import get_db, get_current_user
+from app.api.v1.deps import get_db, get_current_user, check_document_access, check_document_write_access
 from app.schemas.document import (
     DocumentResponse, DocumentListResponse, DocumentStatusResponse,
     DocumentDetailResponse, DocumentTypeResponse, ExtractedFieldResponse,
@@ -180,6 +180,7 @@ async def get_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found"
         )
+    check_document_access(document, current_user)
     return document
 
 
@@ -195,7 +196,8 @@ async def get_document_status(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found"
         )
-    
+    check_document_access(document, current_user)
+
     status_messages = {
         "UPLOADED": "Document uploaded and waiting for processing.",
         "PROCESSING": "Document is being processed by the AI.",
@@ -223,7 +225,8 @@ async def get_document_data(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found"
         )
-    
+    check_document_access(document, current_user)
+
     doc_type = None
     if document.document_type_id:
         doc_type = db.query(DocumentType).filter(DocumentType.id == document.document_type_id).first()
@@ -288,7 +291,8 @@ async def update_document_data(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found"
         )
-    
+    check_document_write_access(current_user)
+
     for update in updates.updates:
         extracted_field = db.query(ExtractedData).filter(
             ExtractedData.document_id == document_id,
@@ -337,10 +341,11 @@ async def download_document(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Document not found"
         )
-    
+    check_document_access(document, current_user)
+
     storage_service = StorageService()
     file_content = await storage_service.download_file(document.storage_path)
-    
+
     from fastapi.responses import Response
     return Response(
         content=file_content,
@@ -360,6 +365,7 @@ async def preview_document(
     document = db.query(Document).filter(Document.id == document_id).first()
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    check_document_access(document, current_user)
 
     storage_service = StorageService()
     file_content = await storage_service.download_file(document.storage_path)

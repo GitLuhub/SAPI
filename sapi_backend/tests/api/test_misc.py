@@ -185,3 +185,65 @@ def test_get_document_data_with_type(client: TestClient, db_session: Session):
     data = resp.json()
     assert data["document_type"] is not None
     assert data["document_type"]["name"] == "Factura Test Type"
+
+
+# ---------------------------------------------------------------------------
+# require_role dependency (deps.py)
+# ---------------------------------------------------------------------------
+
+def test_require_role_allows_matching_role(client: TestClient, db_session: Session):
+    """require_role returns user when role matches."""
+    from app.api.v1.deps import require_role
+    user = User(
+        username="role_ok",
+        email="role_ok@test.com",
+        hashed_password=get_password_hash("pass"),
+        role="document_reviewer",
+        is_active=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+    db_session.refresh(user)
+
+    checker = require_role("document_reviewer", "admin")
+    result = checker(current_user=user)
+    assert result is user
+
+
+def test_require_role_blocks_wrong_role(client: TestClient, db_session: Session):
+    """require_role raises 403 when role does not match."""
+    from app.api.v1.deps import require_role
+    user = User(
+        username="role_blocked",
+        email="role_blocked@test.com",
+        hashed_password=get_password_hash("pass"),
+        role="user",
+        is_active=True,
+        is_superuser=False,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    checker = require_role("document_reviewer", "admin")
+    with pytest.raises(HTTPException) as exc_info:
+        checker(current_user=user)
+    assert exc_info.value.status_code == 403
+
+
+def test_require_role_allows_superuser(client: TestClient, db_session: Session):
+    """require_role always allows superusers regardless of role."""
+    from app.api.v1.deps import require_role
+    user = User(
+        username="superuser_role",
+        email="superuser_role@test.com",
+        hashed_password=get_password_hash("pass"),
+        role="user",
+        is_active=True,
+        is_superuser=True,
+    )
+    db_session.add(user)
+    db_session.commit()
+
+    checker = require_role("document_reviewer")
+    result = checker(current_user=user)
+    assert result is user

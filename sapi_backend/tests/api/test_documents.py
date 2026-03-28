@@ -15,12 +15,12 @@ def create_test_token(user: User) -> str:
     return create_access_token(subject=str(user.id), expires_delta=timedelta(minutes=30))
 
 
-def setup_user(db_session: Session, username="docuser") -> User:
+def setup_user(db_session: Session, username="docuser", role="user") -> User:
     user = User(
         username=username,
         email=f"{username}@example.com",
         hashed_password=get_password_hash("password123"),
-        role="user",
+        role=role,
         is_active=True,
     )
     db_session.add(user)
@@ -189,7 +189,7 @@ def test_get_document_data_not_found(client: TestClient, db_session: Session):
 
 
 def test_update_document_data(client: TestClient, db_session: Session):
-    user = setup_user(db_session, username="docuser10")
+    user = setup_user(db_session, username="docuser10", role="document_reviewer")
     token = create_test_token(user)
     doc = make_doc(db_session, user, status="REVIEW_NEEDED")
     ed = ExtractedData(document_id=doc.id, field_name="field1", final_value="old_val", is_corrected=False)
