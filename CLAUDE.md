@@ -425,34 +425,28 @@ Requisitos del PRD marcados como ausentes o parciales en el informe.
 
 ---
 
-### Sprint F — Infraestructura: HTTPS y Operacional (estimado: 2 sesiones)
+### Sprint F — Infraestructura: HTTPS y Operacional ✅ COMPLETO
 
-- [ ] **F1. Configurar HTTPS en Nginx**
-  - Agregar servidor `listen 443 ssl` en `nginx/conf.d/default.conf`.
-  - Para desarrollo local: certificado autofirmado con `openssl req -x509 ...`.
-  - Para producción: integrar Let's Encrypt (Certbot) o configurar variables `SSL_CERT_PATH` / `SSL_KEY_PATH`.
-  - Redirigir HTTP → HTTPS con `return 301 https://...`.
-  - Actualizar `docker-compose.yml` para exponer puerto 443.
+- [x] **F1. Configurar HTTPS en Nginx**
+  - `nginx/conf.d/default.conf`: bloque HTTP→HTTPS + servidor 443 ssl con TLSv1.2/1.3.
+  - Script `nginx/generate-certs.sh` para cert autofirmado de desarrollo local.
+  - Certs montados en `/etc/nginx/ssl/` vía volume en docker-compose.
 
-- [ ] **F2. Configurar backups automáticos de PostgreSQL**
-  - Agregar un servicio `db_backup` en `docker-compose.yml` con imagen `postgres:15`.
-  - Script: `pg_dump` diario guardado en volumen `./backups/`.
-  - Retención: 7 copias (rotar con `find ./backups -mtime +7 -delete`).
+- [x] **F2. Configurar backups automáticos de PostgreSQL**
+  - Servicio `db_backup` en docker-compose: `pg_dump` diario comprimido en `backups/`.
+  - Retención automática: `find ./backups -mtime +7 -delete`.
 
-- [ ] **F3. Corregir healthcheck de `celery_beat`**
-  - El healthcheck actual es frágil (busca proceso por cmdline).
-  - Usar `celery inspect ping` que es el mecanismo oficial.
+- [x] **F3. Corregir healthcheck de `celery_beat`**
+  - Beat arranca con `--pidfile=/tmp/celerybeat.pid`.
+  - Healthcheck: `test -f /tmp/celerybeat.pid && kill -0 $(cat /tmp/celerybeat.pid)`.
 
-- [ ] **F4. Agregar variables de entorno para producción en `.env.example`**
-  - `ENVIRONMENT=production`
-  - `SSL_CERT_PATH`, `SSL_KEY_PATH`
-  - `ALLOWED_ORIGINS` con dominio real
-  - Documentar cada variable con comentario.
+- [x] **F4. Agregar variables de entorno para producción en `.env.example`**
+  - Documentadas: `ENVIRONMENT`, `SSL_CERT_PATH`, `SSL_KEY_PATH`, `ALLOWED_ORIGINS`.
+  - Cada variable con comentario `[PROD]` indicando su criticidad.
 
-- [ ] **F5. Configurar logs estructurados (JSON)**
-  - Agregar `python-json-logger` a `requirements.txt`.
-  - Configurar en `main.py` para que los logs del backend sean JSON con campos `timestamp`, `level`, `logger`, `message`.
-  - Facilita la ingestión en herramientas como Loki, Datadog o CloudWatch.
+- [x] **F5. Configurar logs estructurados (JSON)**
+  - `python-json-logger==2.0.7` en `requirements.txt`.
+  - `_setup_logging()` en `main.py`: logs JSON con timestamp, level, logger, message.
 
 ---
 
@@ -588,12 +582,12 @@ El MVP se considera listo para producción cuando:
 - [x] Autenticación JWT con refresh tokens
 - [x] Human-in-the-Loop implementado
 - [x] Cobertura de tests backend 100%
-- [ ] Autorización por roles en endpoints de documentos (Sprint B)
-- [ ] AuditLog activo (Sprint C)
-- [ ] `DELETE /documents/{id}` implementado (Sprint D)
-- [ ] HTTPS configurado en Nginx (Sprint F1)
-- [ ] Backups automáticos de PostgreSQL (Sprint F2)
-- [ ] Logs estructurados en JSON (Sprint F5)
+- [x] Autorización por roles en endpoints de documentos (Sprint B)
+- [x] AuditLog activo (Sprint C)
+- [x] `DELETE /documents/{id}` implementado (Sprint D)
+- [x] HTTPS configurado en Nginx (Sprint F1)
+- [x] Backups automáticos de PostgreSQL (Sprint F2)
+- [x] Logs estructurados en JSON (Sprint F5)
 - [ ] Al menos un dashboard de monitoreo operativo (Sprint G)
 - [ ] Tests de integración con PostgreSQL real (Sprint H1)
 
