@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 from app.core.limiter import limiter
 
 from app.api.v1.deps import get_db, get_current_user, check_document_access, check_document_write_access
+from app.core.audit import log_action
 from app.schemas.document import (
     DocumentResponse, DocumentListResponse, DocumentStatusResponse,
     DocumentDetailResponse, DocumentTypeResponse, ExtractedFieldResponse,
@@ -148,9 +149,18 @@ async def upload_document(
     )
     
     db.add(document)
+    log_action(
+        db,
+        action="document.upload",
+        user_id=current_user.id,
+        entity_type="document",
+        entity_id=str(doc_uuid),
+        details=f"filename={file.filename} size={file_size}",
+        ip_address=request.client.host if request.client else None,
+    )
     db.commit()
     db.refresh(document)
-    
+
     message_broker = MessageBrokerService()
     message_broker.publish_document_processing(str(document.id))
 
@@ -324,8 +334,16 @@ async def update_document_data(
         if review_needed_count == 0:
             document.status = DocumentStatus.PROCESSED.value
     
+    log_action(
+        db,
+        action="document.correct_fields",
+        user_id=current_user.id,
+        entity_type="document",
+        entity_id=str(document_id),
+        details=f"fields={[u.field_name for u in updates.updates]}",
+    )
     db.commit()
-    
+
     return MessageResponse(message="Document data updated successfully.")
 
 

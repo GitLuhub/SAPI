@@ -6,6 +6,7 @@ from typing import Optional
 from uuid import UUID
 
 from app.api.v1.deps import get_db
+from app.core.audit import log_action
 from app.core.security import (
     verify_password, create_access_token, get_password_hash,
     create_refresh_token, decode_refresh_token,
@@ -55,6 +56,15 @@ async def login(
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
         path="/api/v1/auth/refresh",
     )
+    log_action(
+        db,
+        action="auth.login",
+        user_id=user.id,
+        entity_type="user",
+        entity_id=str(user.id),
+        ip_address=request.client.host if request.client else None,
+    )
+    db.commit()
     return Token(access_token=access_token, token_type="bearer")
 
 
@@ -92,6 +102,15 @@ async def login_json(
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
         path="/api/v1/auth/refresh",
     )
+    log_action(
+        db,
+        action="auth.login",
+        user_id=user.id,
+        entity_type="user",
+        entity_id=str(user.id),
+        ip_address=request.client.host if request.client else None,
+    )
+    db.commit()
     return Token(access_token=access_token, token_type="bearer")
 
 

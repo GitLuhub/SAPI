@@ -7,6 +7,7 @@ from app.api.v1.deps import get_db, get_current_user, get_current_superuser
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.db.models.user import User
 from app.core.security import get_password_hash
+from app.core.audit import log_action
 
 
 router = APIRouter()
@@ -46,9 +47,17 @@ async def create_user(
     )
     
     db.add(user)
+    log_action(
+        db,
+        action="user.create",
+        user_id=current_user.id,
+        entity_type="user",
+        entity_id=str(user.id),
+        details=f"username={user_in.username} role={user_in.role.value}",
+    )
     db.commit()
     db.refresh(user)
-    
+
     return user
 
 
@@ -104,9 +113,17 @@ async def update_user(
         setattr(user, field, value)
     
     db.add(user)
+    log_action(
+        db,
+        action="user.update",
+        user_id=current_user.id,
+        entity_type="user",
+        entity_id=str(user_id),
+        details=f"fields={list(update_data.keys())}",
+    )
     db.commit()
     db.refresh(user)
-    
+
     return user
 
 
@@ -123,5 +140,13 @@ async def delete_user(
             detail="User not found"
         )
     
+    log_action(
+        db,
+        action="user.delete",
+        user_id=current_user.id,
+        entity_type="user",
+        entity_id=str(user_id),
+        details=f"username={user.username}",
+    )
     db.delete(user)
     db.commit()
