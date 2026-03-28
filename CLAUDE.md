@@ -213,7 +213,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | **Fase 1** — Backend Core | ✅ Completa | JWT auth + refresh, CRUD documentos, storage S3/local, modelos DB |
 | **Fase 2** — IA/Workers | ✅ Completa | Gemini integrado, Celery con reintentos, extracción de entidades |
 | **Fase 3** — Frontend | ✅ Completa | Login, Dashboard, DocumentDetail, upload, corrección HIL, PDF viewer |
-| **Fase 4** — Testing | ✅ Completa | 151 tests, cobertura 100% (pytest --cov --fail-under=80) |
+| **Fase 4** — Testing | ✅ Completa | 156 tests, cobertura 100% (pytest --cov --fail-under=80) |
 | **Fase 5** — Deploy | ❌ Pendiente | CI/CD, SSL, monitoreo, producción |
 
 ---
@@ -236,7 +236,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | Precisión clasificación IA | >90% |
 | Tiempo procesamiento | <30s/documento |
 | Tiempo respuesta API | <500ms |
-| Cobertura de tests | ✅ 100% (151 tests) |
+| Cobertura de tests | ✅ 100% (156 tests) |
 | Reducción trabajo manual | -70% |
 | Volumen objetivo | 10,000 docs/mes |
 
