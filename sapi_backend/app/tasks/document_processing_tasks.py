@@ -36,41 +36,56 @@ def process_document_task(self, document_id: str) -> dict:
         # We need to run the async download in a sync way
         import asyncio
         file_content = asyncio.run(storage_service.download_file(document.storage_path))
-        
+
+        text_content = ""
+        image_bytes = None
+        image_mime_type = None
+
         if isinstance(file_content, bytes):
-            try:
-                text_content = file_content.decode('utf-8')
-            except UnicodeDecodeError:
-                # Intenta extraer texto de PDF con pypdf
+            mime = (document.mime_type or "").lower()
+            if mime.startswith("image/"):
+                # Imágenes: pasar directamente a Gemini como multimodal
+                image_bytes = file_content
+                image_mime_type = mime
+                logger.info(f"Image file detected ({mime}), using multimodal processing")
+            else:
                 try:
-                    import io
-                    import pypdf
-                    reader = pypdf.PdfReader(io.BytesIO(file_content))
-                    pages_text = [page.extract_text() or "" for page in reader.pages]
-                    text_content = "\n".join(pages_text).strip()
-                    if not text_content:
-                        text_content = f"[PDF sin texto extraíble - {len(file_content)} bytes]"
-                    logger.info(f"PDF text extracted: {len(text_content)} chars from {len(reader.pages)} pages")
-                except Exception as pdf_err:
-                    logger.warning(f"PDF extraction failed: {pdf_err}")
-                    text_content = f"[Binary document content - {len(file_content)} bytes]"
-        
-        doc_type, classification_confidence = ai_service.classify_document(text_content)
-        
+                    text_content = file_content.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Intenta extraer texto de PDF con pypdf
+                    try:
+                        import io
+                        import pypdf
+                        reader = pypdf.PdfReader(io.BytesIO(file_content))
+                        pages_text = [page.extract_text() or "" for page in reader.pages]
+                        text_content = "\n".join(pages_text).strip()
+                        if not text_content:
+                            text_content = f"[PDF sin texto extraíble - {len(file_content)} bytes]"
+                        logger.info(f"PDF text extracted: {len(text_content)} chars from {len(reader.pages)} pages")
+                    except Exception as pdf_err:
+                        logger.warning(f"PDF extraction failed: {pdf_err}")
+                        text_content = f"[Binary document content - {len(file_content)} bytes]"
+
+        doc_type, classification_confidence = ai_service.classify_document(
+            text_content, image_bytes, image_mime_type
+        )
+
         doc_type_record = db.query(DocumentType).filter(
             DocumentType.name == doc_type
         ).first()
-        
+
         if not doc_type_record:
             doc_type_record = db.query(DocumentType).filter(
                 DocumentType.name.ilike(f"%{doc_type}%")
             ).first()
-        
+
         document.document_type_id = doc_type_record.id if doc_type_record else None
         document.classification_confidence = classification_confidence
-        
-        extracted_fields = ai_service.extract_entities(text_content, doc_type)
-        
+
+        extracted_fields = ai_service.extract_entities(
+            text_content, doc_type, image_bytes, image_mime_type
+        )
+
         for field_data in extracted_fields:
             existing_field = db.query(ExtractedData).filter(
                 ExtractedData.document_id == document.id,
@@ -93,7 +108,9 @@ def process_document_task(self, document_id: str) -> dict:
                 )
                 db.add(new_field)
         
-        executive_summary = ai_service.summarize_document(text_content)
+        executive_summary = ai_service.summarize_document(
+            text_content, image_bytes, image_mime_type
+        )
         document.executive_summary = executive_summary
         
         try:

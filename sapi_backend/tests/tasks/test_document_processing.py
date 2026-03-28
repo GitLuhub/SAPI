@@ -145,6 +145,34 @@ def test_process_document_task_nonnumeric_confidence(mock_ai, mock_download, db_
 
 @patch("app.tasks.document_processing_tasks.storage_service.download_file", new_callable=AsyncMock)
 @patch("app.tasks.document_processing_tasks.ai_service")
+def test_process_document_task_image_multimodal(mock_ai, mock_download, db_session: Session):
+    """JPEG/PNG files are detected by MIME type and passed as image_bytes (lines 48-50)."""
+    user, doc = _setup(db_session)
+    doc.mime_type = "image/jpeg"
+    db_session.commit()
+
+    mock_download.return_value = b"\xff\xd8\xff\xe0"  # JPEG header bytes
+    mock_ai.classify_document.return_value = ("Factura de Proveedor", "0.91")
+    mock_ai.extract_entities.return_value = [
+        {"field_name": "numero_factura", "ai_extracted_value": "F-IMG-001", "ai_confidence": "0.90"}
+    ]
+    mock_ai.summarize_document.return_value = "Factura de imagen procesada correctamente."
+
+    with patch("app.tasks.document_processing_tasks.SessionLocal", return_value=db_session):
+        db_session.close = MagicMock()
+        result = process_document_task(str(doc.id))
+
+    assert result["status"] == "success"
+    db_session.refresh(doc)
+    assert doc.status == "PROCESSED"
+    # Verify classify was called with image_bytes and image_mime_type
+    call_args = mock_ai.classify_document.call_args
+    assert call_args[0][1] == b"\xff\xd8\xff\xe0"  # image_bytes
+    assert call_args[0][2] == "image/jpeg"           # image_mime_type
+
+
+@patch("app.tasks.document_processing_tasks.storage_service.download_file", new_callable=AsyncMock)
+@patch("app.tasks.document_processing_tasks.ai_service")
 def test_process_document_task_pdf_extraction(mock_ai, mock_download, db_session: Session):
     """Binary non-UTF-8 content → pypdf extraction path (lines 48-53)."""
     user, doc = _setup(db_session)

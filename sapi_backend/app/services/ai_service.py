@@ -1,9 +1,9 @@
 import json
 import logging
 from typing import Dict, List, Optional, Tuple
-from uuid import UUID
 
 import google.generativeai as genai
+import google.ai.generativelanguage as glm
 
 from app.core.config import settings
 
@@ -40,7 +40,7 @@ class GeminiAIService:
         else:
             genai.configure(api_key=settings.GEMINI_API_KEY)
             self.client = genai.GenerativeModel('gemini-2.5-flash')
-    
+
     def _parse_json_response(self, response_text: str) -> Dict:
         try:
             return json.loads(response_text)
@@ -57,23 +57,43 @@ class GeminiAIService:
                 logger.error(f"Failed to parse JSON response: {e}")
                 logger.debug(f"Response text: {response_text[:500]}")
                 raise ValueError("Invalid JSON response from AI model")
-    
-    def _call_gemini(self, prompt: str) -> str:
+
+    def _call_gemini(
+        self,
+        prompt: str,
+        image_bytes: Optional[bytes] = None,
+        image_mime_type: Optional[str] = None,
+    ) -> str:
         if not self.client:
             raise RuntimeError("Gemini client not configured")
-        
+
         try:
-            response = self.client.generate_content(prompt)
+            if image_bytes and image_mime_type:
+                blob = glm.Blob(mime_type=image_mime_type, data=image_bytes)
+                response = self.client.generate_content([prompt, blob])
+            else:
+                response = self.client.generate_content(prompt)
             return response.text
         except Exception as e:
             logger.error(f"Error calling Gemini API: {e}")
             raise
-    
-    def classify_document(self, text: str) -> Tuple[str, float]:
+
+    def classify_document(
+        self,
+        text: str,
+        image_bytes: Optional[bytes] = None,
+        image_mime_type: Optional[str] = None,
+    ) -> Tuple[str, float]:
         if not self.client:
             return "Factura de Proveedor", "0.75"
-        
-        prompt = f"""Clasifica el siguiente documento como "Factura de Proveedor" o "Contrato Simple".
+
+        if image_bytes:
+            prompt = """Clasifica este documento como "Factura de Proveedor" o "Contrato Simple".
+Responde SOLO con JSON en este formato exacto:
+{"tipo": "nombre_del_tipo", "confianza": 0.95}
+"""
+        else:
+            prompt = f"""Clasifica el siguiente documento como "Factura de Proveedor" o "Contrato Simple".
 
 Documento:
 {text[:2000]}
@@ -81,39 +101,51 @@ Documento:
 Responde SOLO con JSON en este formato exacto:
 {{"tipo": "nombre_del_tipo", "confianza": 0.95}}
 """
-        
+
         try:
-            response_text = self._call_gemini(prompt)
+            response_text = self._call_gemini(prompt, image_bytes, image_mime_type)
             result = self._parse_json_response(response_text)
-            
+
             doc_type = result.get("tipo", "Factura de Proveedor")
             confidence = str(result.get("confianza", 0.75))
-            
+
             if confidence.replace(".", "").isdigit():
                 if float(confidence) > 1:
                     confidence = str(float(confidence) / 100)
-            
+
             return doc_type, confidence
         except Exception as e:
             logger.error(f"Classification error: {e}")
             return "Factura de Proveedor", "0.50"
-    
+
     def extract_entities(
-        self, 
-        text: str, 
-        doc_type: str
+        self,
+        text: str,
+        doc_type: str,
+        image_bytes: Optional[bytes] = None,
+        image_mime_type: Optional[str] = None,
     ) -> List[Dict]:
         if not self.client:
             return []
-        
+
         if "factura" in doc_type.lower():
             fields = FACTURA_FIELDS
         else:
             fields = CONTRATO_FIELDS
-        
+
         fields_json = json.dumps(fields, ensure_ascii=False)
-        
-        prompt = f"""Extrae los siguientes campos del documento:
+
+        if image_bytes:
+            prompt = f"""Extrae los siguientes campos de este documento:
+
+Campos requeridos:
+{fields_json}
+
+Responde SOLO con JSON en este formato:
+{{"campos": [{{"nombre": "campo", "valor": "valor_extraido", "confianza": 0.95}}, ...]}}
+"""
+        else:
+            prompt = f"""Extrae los siguientes campos del documento:
 
 Campos requeridos:
 {fields_json}
@@ -124,17 +156,17 @@ Documento:
 Responde SOLO con JSON en este formato:
 {{"campos": [{{"nombre": "campo", "valor": "valor_extraido", "confianza": 0.95}}, ...]}}
 """
-        
+
         try:
-            response_text = self._call_gemini(prompt)
+            response_text = self._call_gemini(prompt, image_bytes, image_mime_type)
             result = self._parse_json_response(response_text)
-            
+
             fields_data = result.get("campos", [])
             return [
                 {
                     "field_name": f.get("nombre", ""),
                     "field_label": next(
-                        (label for name, label in fields if name == f.get("nombre")), 
+                        (label for name, label in fields if name == f.get("nombre")),
                         f.get("nombre", "")
                     ),
                     "ai_extracted_value": f.get("valor", ""),
@@ -146,21 +178,29 @@ Responde SOLO con JSON en este formato:
         except Exception as e:
             logger.error(f"Entity extraction error: {e}")
             return []
-    
-    def summarize_document(self, text: str) -> str:
+
+    def summarize_document(
+        self,
+        text: str,
+        image_bytes: Optional[bytes] = None,
+        image_mime_type: Optional[str] = None,
+    ) -> str:
         if not self.client:
             return "Resumen no disponible (AI no configurada)."
-        
-        prompt = f"""Genera un resumen ejecutivo conciso del siguiente documento (máximo 500 caracteres):
+
+        if image_bytes:
+            prompt = "Genera un resumen ejecutivo conciso de este documento (máximo 500 caracteres). Responde SOLO con el resumen, sin preamble ni explicaciones."
+        else:
+            prompt = f"""Genera un resumen ejecutivo conciso del siguiente documento (máximo 500 caracteres):
 
 Documento:
 {text[:3000]}
 
 Responde SOLO con el resumen, sin preamble ni explicaciones.
 """
-        
+
         try:
-            response_text = self._call_gemini(prompt)
+            response_text = self._call_gemini(prompt, image_bytes, image_mime_type)
             return response_text.strip()[:500]
         except Exception as e:
             logger.error(f"Summarization error: {e}")
