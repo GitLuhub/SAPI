@@ -83,16 +83,23 @@ SAPI/
 │   ├── tests/
 │   │   ├── conftest.py                        # SQLite in-memory, TestClient, fixtures
 │   │   ├── api/
-│   │   │   ├── test_auth.py                   # 14 tests (login, register, refresh, logout)
+│   │   │   ├── test_auth.py                   # 16 tests (login form+JSON, register, refresh, logout, inactivo)
 │   │   │   ├── test_documents.py              # 19 tests (upload, CRUD, data, types)
+│   │   │   ├── test_documents_extra.py        # 13 tests (filtros, download, preview, status, HIL)
+│   │   │   ├── test_misc.py                   # 10 tests (health, deps edge cases, docs misc)
 │   │   │   ├── test_users.py                  # 1 test (/me)
-│   │   │   └── test_users2.py                 # 3 tests (CRUD admin) — algunos endpoints no existen aún
+│   │   │   └── test_users2.py                 # 12 tests (CRUD admin, password, role)
+│   │   ├── db/
+│   │   │   ├── test_models.py                 # 5 tests (__repr__ de todos los modelos)
+│   │   │   └── test_session.py                # 2 tests (get_db generator + cierre en finally)
 │   │   ├── services/
-│   │   │   ├── test_gemini_service.py         # 2 tests (classify, extract — mocked)
-│   │   │   ├── test_storage_service.py        # 1 test (local upload/download/delete)
-│   │   │   └── test_notification_service.py   # 10 tests (CONSOLE + SMTP)
+│   │   │   ├── test_gemini_service.py         # 15 tests (classify, extract, summarize, JSON parse, no client)
+│   │   │   ├── test_storage_service.py        # 16 tests (LOCAL + AWS S3 completo)
+│   │   │   ├── test_message_broker_service.py # 7 tests (publish, no celery, init failure)
+│   │   │   └── test_notification_service.py   # 11 tests (CONSOLE + SMTP + html_body)
 │   │   └── tasks/
-│   │       └── test_document_processing.py    # 1 test (process_document_task — mocked)
+│   │       ├── test_document_processing.py    # 8 tests (success, pypdf, existing field, exception, retry)
+│   │       └── test_notification_tasks.py     # 4 tests (all statuses, not found, exception)
 │   ├── pytest.ini                             # asyncio_mode=auto, cov --fail-under=80
 │   ├── requirements.txt
 │   └── Dockerfile                             # python:3.11-slim, health check en /health
@@ -206,21 +213,19 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | **Fase 1** — Backend Core | ✅ Completa | JWT auth + refresh, CRUD documentos, storage S3/local, modelos DB |
 | **Fase 2** — IA/Workers | ✅ Completa | Gemini integrado, Celery con reintentos, extracción de entidades |
 | **Fase 3** — Frontend | ✅ Completa | Login, Dashboard, DocumentDetail, upload, corrección HIL, PDF viewer |
-| **Fase 4** — Testing | ⚠️ En progreso | ~40 tests existentes, cobertura estimada ~40% — objetivo >80% |
+| **Fase 4** — Testing | ✅ Completa | 151 tests, cobertura 100% (pytest --cov --fail-under=80) |
 | **Fase 5** — Deploy | ❌ Pendiente | CI/CD, SSL, monitoreo, producción |
 
 ---
 
 ## Issues Pendientes (Reales)
 
-1. **Cobertura de tests < 80%** — ~40 tests cubren ~40% del código; hay tests que referencian endpoints inexistentes (ej. `PUT /users/me` en `test_users2.py`)
-2. **Rate limiting incompleto** — solo en auth y upload; los endpoints GET, PUT y admin no tienen throttling
-3. **Dos endpoints de login redundantes** — `POST /auth/login` (form-data) y `POST /auth/login/json` (JSON body); deberían unificarse o documentarse la distinción
-4. **`/crud/` vacío** — la lógica CRUD vive directamente en los endpoints; no hay capa de repositorio
-5. **Celery Beat sin tareas programadas** — `celery_beat` está configurado y en Docker Compose, pero no hay tareas periódicas definidas
-6. **HTTPS no configurado en Nginx** — solo puerto 80 activo; producción requiere SSL/TLS
-7. **`test_users2.py`** — referencia `PUT /api/v1/users/me` y `POST /api/v1/users` que no existen en `users.py`; estos tests fallan o son incorrectos
-8. **`hooks/` vacío** — directorio creado pero sin custom hooks de React
+1. **Rate limiting incompleto** — solo en auth y upload; los endpoints GET, PUT y admin no tienen throttling
+2. **Dos endpoints de login redundantes** — `POST /auth/login` (form-data) y `POST /auth/login/json` (JSON body); deberían unificarse o documentarse la distinción
+3. **`/crud/` vacío** — la lógica CRUD vive directamente en los endpoints; no hay capa de repositorio
+4. **Celery Beat sin tareas programadas** — `celery_beat` está configurado y en Docker Compose, pero no hay tareas periódicas definidas
+5. **HTTPS no configurado en Nginx** — solo puerto 80 activo; producción requiere SSL/TLS
+6. **`hooks/` vacío** — directorio creado pero sin custom hooks de React
 
 ---
 
@@ -231,7 +236,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | Precisión clasificación IA | >90% |
 | Tiempo procesamiento | <30s/documento |
 | Tiempo respuesta API | <500ms |
-| Cobertura de tests | >80% |
+| Cobertura de tests | ✅ 100% (151 tests) |
 | Reducción trabajo manual | -70% |
 | Volumen objetivo | 10,000 docs/mes |
 
@@ -257,3 +262,30 @@ docker-compose up --build -d
 # Redis:       localhost:6379
 # Credenciales test: admin / admin123
 ```
+
+---
+
+## Ejecutar Tests Localmente (sin Docker)
+
+```bash
+cd sapi_backend
+
+# Activar entorno virtual
+source .venv/bin/activate          # Linux/macOS
+# .venv\Scripts\activate           # Windows
+
+# Instalar dependencias (primera vez)
+pip install -r requirements.txt
+
+# Ejecutar todos los tests con cobertura
+python -m pytest --cov=app --cov-report=term-missing
+
+# Ejecutar un módulo específico
+python -m pytest tests/api/test_auth.py -v
+
+# Ejecutar con reporte HTML
+python -m pytest --cov=app --cov-report=html
+# → Abre htmlcov/index.html en el navegador
+```
+
+> **Nota:** Los tests usan SQLite in-memory — no requieren PostgreSQL ni Redis.
