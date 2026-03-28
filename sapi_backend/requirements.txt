@@ -24,6 +24,8 @@ python-dotenv
 slowapi
 pypdf
 
+python-json-logger==2.0.7
+
 pytest
 pytest-asyncio
 pytest-cov

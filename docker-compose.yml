@@ -13,6 +13,7 @@ services:
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/conf.d:/etc/nginx/conf.d:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
     depends_on:
       - backend
       - web_client
@@ -189,7 +190,7 @@ services:
       dockerfile: Dockerfile
     container_name: sapi_celery_beat
     command: >
-      sh -c "celery -A app.tasks.celery_app beat --loglevel=info"
+      sh -c "celery -A app.tasks.celery_app beat --loglevel=info --pidfile=/tmp/celerybeat.pid"
     env_file:
       - .env
     environment:
@@ -206,11 +207,35 @@ services:
       - sapi_network
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "python3 -c \"import sys; d=open('/proc/1/cmdline','rb').read(); sys.exit(0 if b'celery' in d else 1)\""]
+      test: ["CMD-SHELL", "test -f /tmp/celerybeat.pid && kill -0 $(cat /tmp/celerybeat.pid) 2>/dev/null"]
       interval: 30s
       timeout: 5s
       retries: 3
       start_period: 30s
+
+  # ----------------------------------------
+  # Database Backup Service
+  # ----------------------------------------
+  db_backup:
+    image: postgres:15-alpine
+    container_name: sapi_db_backup
+    environment:
+      PGPASSWORD: sapi_password
+    volumes:
+      - ./backups:/backups
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - sapi_network
+    restart: unless-stopped
+    entrypoint: >
+      sh -c "while true; do
+        pg_dump -h db -U sapi_user sapi_db | gzip > /backups/sapi_backup_$$(date +%Y%m%d_%H%M%S).sql.gz
+        find /backups -name '*.sql.gz' -mtime +7 -delete
+        echo \"Backup completado: $$(date)\"
+        sleep 86400
+      done"
 
 # ----------------------------------------
 # Volumes for data persistence

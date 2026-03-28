@@ -91,3 +91,12 @@ celerybeat.pid
 *.old
 Sample-SAPI
 
+
+# SSL certs (generados localmente)
+nginx/ssl/*.pem
+nginx/ssl/*.crt
+nginx/ssl/*.key
+
+# Backups de base de datos
+backups/*.sql.gz
+backups/*.sql
