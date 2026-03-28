@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFi
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.limiter import limiter
+from app.services.cache_service import cache_service
 
 from app.api.v1.deps import get_db, get_current_user, check_document_access, check_document_write_access
 from app.core.audit import log_action
@@ -425,10 +426,19 @@ async def delete_document(
     db.commit()
 
 
+_DOCUMENT_TYPES_CACHE_KEY = "document_types:active"
+
+
 @router.get("/types/", response_model=List[DocumentTypeResponse])
 async def list_document_types(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> List[DocumentType]:
+    cached = cache_service.get(_DOCUMENT_TYPES_CACHE_KEY)
+    if cached is not None:
+        return cached
+
     types = db.query(DocumentType).filter(DocumentType.is_active == True).all()
+    serialized = [{"id": str(t.id), "name": t.name, "description": t.description, "is_active": t.is_active} for t in types]
+    cache_service.set(_DOCUMENT_TYPES_CACHE_KEY, serialized)
     return types

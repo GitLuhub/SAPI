@@ -220,3 +220,20 @@ def test_list_document_types(client: TestClient, db_session: Session):
     assert response.status_code == 200
     names = [t["name"] for t in response.json()]
     assert "Factura" in names
+
+
+@patch("app.api.v1.endpoints.documents.cache_service.get")
+def test_list_document_types_cache_hit(mock_cache_get, client: TestClient, db_session: Session):
+    """When the cache has data, return it without querying the DB."""
+    user = setup_user(db_session, username="docuser_cachehit")
+    token = create_test_token(user)
+    fake_id = str(uuid.uuid4())
+    now = "2026-01-01T00:00:00"
+    mock_cache_get.return_value = [
+        {"id": fake_id, "name": "Cached Type", "description": None, "is_active": True,
+         "created_at": now, "updated_at": now}
+    ]
+
+    response = client.get("/api/v1/documents/types/", headers={"Authorization": f"Bearer {token}"})
+    assert response.status_code == 200
+    assert response.json()[0]["name"] == "Cached Type"
