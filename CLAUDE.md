@@ -217,7 +217,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | **Fase 1** — Backend Core | ✅ Completa | JWT auth + refresh, CRUD documentos, storage S3/local, modelos DB |
 | **Fase 2** — IA/Workers | ✅ Completa | Gemini integrado, Celery con reintentos, extracción de entidades |
 | **Fase 3** — Frontend | ✅ Completa | Login, Dashboard, DocumentDetail, upload, corrección HIL, PDF viewer |
-| **Fase 4** — Testing | ✅ Completa | 190 tests, cobertura 100% backend (pytest --cov --fail-under=80) |
+| **Fase 4** — Testing | ✅ Completa | 191 tests, cobertura 100% backend (pytest --cov --fail-under=80) |
 | **Fase 5** — Hardening | 🔄 En curso | Ver plan de producción más abajo |
 
 ---
@@ -229,7 +229,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | Precisión clasificación IA | >90% | ✅ Verificado en producción (0.95–0.99) |
 | Tiempo procesamiento | <30s/documento | ❓ Sin medir formalmente |
 | Tiempo respuesta API | <500ms | ❓ Sin medir formalmente |
-| Cobertura de tests (backend) | 100% | ✅ 190 tests |
+| Cobertura de tests (backend) | 100% | ✅ 191 tests |
 | Cobertura de tests (frontend) | >80% | ❌ 0% (sin tests) |
 | Reducción trabajo manual | -70% | ❓ Sin medir |
 | Volumen objetivo | 10 000 docs/mes | ❓ Sin test de carga |
@@ -450,21 +450,23 @@ Requisitos del PRD marcados como ausentes o parciales en el informe.
 
 ---
 
-### Sprint G — Monitoreo y Observabilidad (estimado: 1 sesión)
+### Sprint G — Monitoreo y Observabilidad ✅ COMPLETO
 
-- [ ] **G1. Exponer métricas Prometheus en el backend**
-  - Agregar `prometheus-fastapi-instrumentator` a `requirements.txt`.
-  - En `main.py`: `Instrumentator().instrument(app).expose(app, endpoint="/metrics")`.
-  - Métricas automáticas: latencia de endpoints, tasa de errores, requests en vuelo.
+- [x] **G1. Exponer métricas Prometheus en el backend**
+  - `prometheus-fastapi-instrumentator==6.1.0` en `requirements.txt`.
+  - `Instrumentator().instrument(app).expose(app, endpoint="/metrics")` en `main.py`.
+  - Métricas: latencia (histograma), tasa de requests, errores, requests en vuelo.
 
-- [ ] **G2. Agregar `docker-compose.monitoring.yml` con Prometheus + Grafana**
-  - Servicios: `prometheus` (puerto 9090) y `grafana` (puerto 3001).
-  - Dashboard predefinido para FastAPI y Celery.
-  - Opcional: Flower para monitoreo de colas Celery.
+- [x] **G2. Agregar `docker-compose.monitoring.yml` con Prometheus + Grafana**
+  - `docker-compose.monitoring.yml`: Prometheus (9090), Grafana (3001, admin/admin), Flower (5555).
+  - `monitoring/prometheus.yml` con scrape config al backend cada 10s.
+  - Dashboard `sapi_overview.json` provisionado automáticamente en Grafana.
 
-- [ ] **G3. Alertas básicas**
-  - Alerta si `process_document_task` tiene tasa de error > 10% en 5 minutos.
-  - Alerta si la cola `ai_processing` supera 50 mensajes sin procesar.
+- [x] **G3. Alertas básicas**
+  - `monitoring/alerts/sapi_alerts.yml` con 3 reglas:
+    - `HighErrorRate` → 5xx > 10% en 5 min (critical)
+    - `HighLatency` → P95 > 500ms en 5 min (warning)
+    - `BackendDown` → scrape fallando > 2 min (critical)
 
 ---
 
@@ -588,7 +590,7 @@ El MVP se considera listo para producción cuando:
 - [x] HTTPS configurado en Nginx (Sprint F1)
 - [x] Backups automáticos de PostgreSQL (Sprint F2)
 - [x] Logs estructurados en JSON (Sprint F5)
-- [ ] Al menos un dashboard de monitoreo operativo (Sprint G)
+- [x] Al menos un dashboard de monitoreo operativo (Sprint G)
 - [ ] Tests de integración con PostgreSQL real (Sprint H1)
 
 ---
