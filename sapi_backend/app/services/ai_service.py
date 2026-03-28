@@ -39,7 +39,7 @@ class GeminiAIService:
             self.client = None
         else:
             genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.client = genai.GenerativeModel('gemini-1.5-pro-latest')
+            self.client = genai.GenerativeModel('gemini-2.5-flash')
     
     def _parse_json_response(self, response_text: str) -> Dict:
         try:

@@ -41,7 +41,19 @@ def process_document_task(self, document_id: str) -> dict:
             try:
                 text_content = file_content.decode('utf-8')
             except UnicodeDecodeError:
-                text_content = f"[Binary document content - {len(file_content)} bytes]"
+                # Intenta extraer texto de PDF con pypdf
+                try:
+                    import io
+                    import pypdf
+                    reader = pypdf.PdfReader(io.BytesIO(file_content))
+                    pages_text = [page.extract_text() or "" for page in reader.pages]
+                    text_content = "\n".join(pages_text).strip()
+                    if not text_content:
+                        text_content = f"[PDF sin texto extraíble - {len(file_content)} bytes]"
+                    logger.info(f"PDF text extracted: {len(text_content)} chars from {len(reader.pages)} pages")
+                except Exception as pdf_err:
+                    logger.warning(f"PDF extraction failed: {pdf_err}")
+                    text_content = f"[Binary document content - {len(file_content)} bytes]"
         
         doc_type, classification_confidence = ai_service.classify_document(text_content)
         
