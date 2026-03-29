@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 import uuid as uuid_lib
 from datetime import datetime, date
@@ -5,9 +7,10 @@ from typing import List, Optional, Tuple
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status, UploadFile, File, Query
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.limiter import limiter
+from app.core.limiter import limiter, get_upload_limit, upload_key_func
 from app.services.cache_service import cache_service
 
 from app.api.v1.deps import get_db, get_current_user, check_document_access, check_document_write_access
@@ -89,7 +92,7 @@ async def list_documents(
 
 
 @router.post("/", response_model=DocumentStatusResponse, status_code=status.HTTP_202_ACCEPTED)
-@limiter.limit("10/minute")
+@limiter.limit(get_upload_limit, key_func=upload_key_func)
 async def upload_document(
     request: Request,
     file: UploadFile = File(...),
@@ -166,6 +169,83 @@ async def upload_document(
         id=document.id,
         status=DocumentStatus.UPLOADED,
         message="Document uploaded successfully and queued for processing."
+    )
+
+
+@router.get("/export")
+async def export_documents(
+    fmt: str = Query("csv", alias="format", pattern="^(csv|xlsx)$"),
+    status_filter: Optional[DocumentStatus] = Query(None, alias="status"),
+    document_type_id: Optional[UUID] = None,
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Exporta los campos extraídos de documentos en formato CSV o XLSX (K2)."""
+    documents, _ = crud_document.list_filtered(
+        db,
+        status_filter=status_filter.value if status_filter else None,
+        document_type_id=document_type_id,
+        date_from=date_from,
+        date_to=date_to,
+        page=1,
+        size=100_000,
+    )
+
+    rows: List[List] = []
+    header = ["ID", "Nombre", "Estado", "Tipo", "Campo", "Etiqueta", "Valor Final", "Confianza IA", "Corregido", "Fecha"]
+
+    for doc in documents:
+        fields = crud_extracted_data.get_by_document(db, doc.id)
+        base = [
+            str(doc.id),
+            doc.original_filename,
+            doc.status,
+            doc.document_type.name if doc.document_type else "",
+        ]
+        created = doc.created_at.isoformat() if doc.created_at else ""
+        if fields:
+            for f in fields:
+                rows.append(base + [
+                    f.field_name,
+                    f.field_label or "",
+                    f.final_value or "",
+                    f.ai_confidence or "",
+                    "Sí" if f.is_corrected else "No",
+                    created,
+                ])
+        else:
+            rows.append(base + ["", "", "", "", "", created])
+
+    if fmt == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(header)
+        writer.writerows(rows)
+        output.seek(0)
+        return StreamingResponse(
+            iter([output.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": "attachment; filename=sapi_export.csv"},
+        )
+
+    # xlsx
+    import openpyxl
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Documentos"
+    ws.append(header)
+    for row in rows:
+        ws.append(row)
+
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return StreamingResponse(
+        iter([buf.getvalue()]),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": "attachment; filename=sapi_export.xlsx"},
     )
 
 
@@ -400,6 +480,51 @@ async def delete_document(
     )
     crud_document.delete(db, document)
     db.commit()
+
+
+@router.post("/{document_id}/reprocess", response_model=DocumentStatusResponse)
+async def reprocess_document(
+    document_id: UUID,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+) -> DocumentStatusResponse:
+    """Reencola un documento en estado ERROR o REVIEW_NEEDED para reprocesamiento (K1)."""
+    document = crud_document.get(db, document_id)
+    if not document:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    check_document_access(document, current_user)
+
+    if document.status not in (DocumentStatus.ERROR.value, DocumentStatus.REVIEW_NEEDED.value):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot reprocess document with status '{document.status}'. Only ERROR or REVIEW_NEEDED documents can be reprocessed.",
+        )
+
+    document.status = DocumentStatus.UPLOADED.value
+    document.processing_error = None
+    document.processing_started_at = None
+    document.processing_completed_at = None
+
+    log_action(
+        db,
+        action="document.reprocess",
+        user_id=current_user.id,
+        entity_type="document",
+        entity_id=str(document_id),
+        details=f"filename={document.original_filename}",
+        ip_address=request.client.host if request.client else None,
+    )
+    db.commit()
+
+    message_broker = MessageBrokerService()
+    message_broker.publish_document_processing(str(document.id))
+
+    return DocumentStatusResponse(
+        id=document.id,
+        status=DocumentStatus.UPLOADED,
+        message="Document requeued for processing.",
+    )
 
 
 _DOCUMENT_TYPES_CACHE_KEY = "document_types:active"

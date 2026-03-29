@@ -93,4 +93,31 @@ export const documentsApi = {
     const response = await apiClient.get<DocumentType[]>('/documents/types/');
     return response.data;
   },
+
+  exportDocuments: async (params: { format?: 'csv' | 'xlsx'; status?: DocumentStatus; date_from?: string; date_to?: string } = {}): Promise<void> => {
+    const urlParams = new URLSearchParams();
+    if (params.format) urlParams.append('format', params.format);
+    if (params.status) urlParams.append('status', params.status);
+    if (params.date_from) urlParams.append('date_from', params.date_from);
+    if (params.date_to) urlParams.append('date_to', params.date_to);
+
+    const response = await apiClient.get(`/documents/export?${urlParams.toString()}`, {
+      responseType: 'blob',
+    });
+
+    const ext = params.format === 'xlsx' ? 'xlsx' : 'csv';
+    const url = window.URL.createObjectURL(new Blob([response.data]));
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `sapi_export.${ext}`);
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  reprocessDocument: async (documentId: string): Promise<DocumentStatusResponse> => {
+    const response = await apiClient.post<DocumentStatusResponse>(`/documents/${documentId}/reprocess`);
+    return response.data;
+  },
 };

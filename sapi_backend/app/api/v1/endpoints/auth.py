@@ -43,6 +43,7 @@ async def login(
 
     access_token = create_access_token(
         subject=str(user.id),
+        role=user.role or "user",
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     refresh_token = create_refresh_token(subject=str(user.id))
@@ -89,6 +90,7 @@ async def login_json(
 
     access_token = create_access_token(
         subject=str(user.id),
+        role=user.role or "user",
         expires_delta=timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     refresh_token = create_refresh_token(subject=str(user.id))
@@ -160,7 +162,7 @@ async def refresh_token(
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or inactive")
 
-    new_access_token = create_access_token(subject=str(user.id))
+    new_access_token = create_access_token(subject=str(user.id), role=user.role or "user")
     new_refresh_token = create_refresh_token(subject=str(user.id))
 
     response.set_cookie(

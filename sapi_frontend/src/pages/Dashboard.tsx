@@ -7,13 +7,13 @@ import {
   FileText,
   Upload,
   Search,
-  Filter,
   Eye,
   Loader2,
   CheckCircle,
   AlertCircle,
   Clock,
   XCircle,
+  Download,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Document, DocumentStatus, DocumentType } from '@/types';
@@ -30,6 +30,7 @@ export default function DashboardPage() {
   const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<DocumentStatus | ''>('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [exportLoading, setExportLoading] = useState(false);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   
   const queryClient = useQueryClient();
@@ -83,6 +84,20 @@ export default function DashboardPage() {
   const handleUpload = () => {
     if (selectedFile) {
       uploadMutation.mutate({ file: selectedFile });
+    }
+  };
+
+  const handleExport = async (format: 'csv' | 'xlsx') => {
+    setExportLoading(true);
+    try {
+      await documentsApi.exportDocuments({
+        format,
+        status: statusFilter || undefined,
+      });
+    } catch {
+      toast.error('Error al exportar documentos');
+    } finally {
+      setExportLoading(false);
     }
   };
 
@@ -186,6 +201,25 @@ export default function DashboardPage() {
                   <option value="REVIEW_NEEDED">Revisión</option>
                   <option value="ERROR">Error</option>
                 </select>
+              </div>
+
+              <div className="flex justify-end gap-2 mb-4">
+                <button
+                  onClick={() => handleExport('csv')}
+                  disabled={exportLoading}
+                  className="flex items-center gap-2 px-3 py-2 text-sm border border-secondary-300 text-secondary-700 rounded-lg hover:bg-secondary-50 disabled:opacity-50"
+                >
+                  {exportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  CSV
+                </button>
+                <button
+                  onClick={() => handleExport('xlsx')}
+                  disabled={exportLoading}
+                  className="flex items-center gap-2 px-3 py-2 text-sm border border-secondary-300 text-secondary-700 rounded-lg hover:bg-secondary-50 disabled:opacity-50"
+                >
+                  {exportLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+                  Excel
+                </button>
               </div>
 
               {isLoading ? (

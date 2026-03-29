@@ -457,3 +457,77 @@ def test_list_documents_date_to_filter(client: TestClient, db_session: Session):
     )
     assert resp.status_code == 200
     assert resp.json()["total"] == 0
+
+
+# ---------------------------------------------------------------------------
+# POST /documents/{id}/reprocess — Sprint K1
+# ---------------------------------------------------------------------------
+
+@patch("app.api.v1.endpoints.documents.MessageBrokerService")
+def test_reprocess_error_document(mock_broker, client: TestClient, db_session: Session):
+    """Owner can reprocess a document in ERROR status; status resets to UPLOADED."""
+    owner = make_user(db_session, "reprocess_owner_error")
+    doc = make_doc(db_session, owner, status="ERROR")
+
+    resp = client.post(
+        f"/api/v1/documents/{doc.id}/reprocess",
+        headers={"Authorization": f"Bearer {token_for(owner)}"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["status"] == "UPLOADED"
+    assert "requeued" in data["message"].lower()
+    db_session.refresh(doc)
+    assert doc.status == "UPLOADED"
+    assert doc.processing_error is None
+
+
+@patch("app.api.v1.endpoints.documents.MessageBrokerService")
+def test_reprocess_review_needed_document(mock_broker, client: TestClient, db_session: Session):
+    """Reviewer can reprocess a REVIEW_NEEDED document."""
+    owner = make_user(db_session, "reprocess_owner_rv")
+    reviewer = make_user_with_role(db_session, "reprocess_rv", "document_reviewer")
+    doc = make_doc(db_session, owner, status="REVIEW_NEEDED")
+
+    resp = client.post(
+        f"/api/v1/documents/{doc.id}/reprocess",
+        headers={"Authorization": f"Bearer {token_for(reviewer)}"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "UPLOADED"
+
+
+def test_reprocess_invalid_status_returns_400(client: TestClient, db_session: Session):
+    """Reprocessing a PROCESSED document returns 400."""
+    owner = make_user(db_session, "reprocess_processed")
+    doc = make_doc(db_session, owner, status="PROCESSED")
+
+    resp = client.post(
+        f"/api/v1/documents/{doc.id}/reprocess",
+        headers={"Authorization": f"Bearer {token_for(owner)}"},
+    )
+    assert resp.status_code == 400
+    assert "cannot reprocess" in resp.json()["detail"].lower()
+
+
+def test_reprocess_not_found_returns_404(client: TestClient, db_session: Session):
+    """Reprocessing a non-existent document returns 404."""
+    user = make_user(db_session, "reprocess_nf")
+    resp = client.post(
+        f"/api/v1/documents/{uuid.uuid4()}/reprocess",
+        headers={"Authorization": f"Bearer {token_for(user)}"},
+    )
+    assert resp.status_code == 404
+
+
+def test_reprocess_other_user_forbidden(client: TestClient, db_session: Session):
+    """A different plain user cannot reprocess someone else's document (403)."""
+    owner = make_user(db_session, "reprocess_own")
+    other = make_user(db_session, "reprocess_other")
+    doc = make_doc(db_session, owner, status="ERROR")
+
+    resp = client.post(
+        f"/api/v1/documents/{doc.id}/reprocess",
+        headers={"Authorization": f"Bearer {token_for(other)}"},
+    )
+    assert resp.status_code == 403

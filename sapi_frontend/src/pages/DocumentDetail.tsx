@@ -9,6 +9,7 @@ import {
   Loader2,
   CheckCircle,
   AlertCircle,
+  RefreshCw,
 } from 'lucide-react';
 import { useState } from 'react';
 import toast from 'react-hot-toast';
@@ -51,6 +52,17 @@ export default function DocumentDetailPage() {
     }));
     updateMutation.mutate(updates);
   };
+
+  const reprocessMutation = useMutation({
+    mutationFn: () => documentsApi.reprocessDocument(documentId!),
+    onSuccess: () => {
+      toast.success('Documento reencolado para reprocesamiento');
+      queryClient.invalidateQueries({ queryKey: ['document', documentId] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Error al reencolar el documento');
+    },
+  });
 
   const handleDownload = () => {
     if (document) {
@@ -216,6 +228,20 @@ export default function DocumentDetailPage() {
                 )}
                 Guardar Cambios
               </button>
+              {(document.status === 'ERROR' || document.status === 'REVIEW_NEEDED') && (
+                <button
+                  onClick={() => reprocessMutation.mutate()}
+                  disabled={reprocessMutation.isPending}
+                  className="flex items-center justify-center gap-2 px-4 py-3 border border-warning text-warning rounded-lg hover:bg-warning/10 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {reprocessMutation.isPending ? (
+                    <Loader2 className="w-5 h-5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-5 h-5" />
+                  )}
+                  Reintentar
+                </button>
+              )}
               <button
                 onClick={handleDownload}
                 className="flex items-center justify-center gap-2 px-4 py-3 border border-secondary-300 text-secondary-700 rounded-lg hover:bg-secondary-50"

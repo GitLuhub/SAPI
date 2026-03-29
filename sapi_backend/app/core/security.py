@@ -19,7 +19,7 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password[:72])
 
 
-def create_access_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
+def create_access_token(subject: str, role: str = "user", expires_delta: Optional[timedelta] = None) -> str:
     expire = datetime.utcnow() + (
         expires_delta if expires_delta
         else timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
@@ -30,6 +30,7 @@ def create_access_token(subject: str, expires_delta: Optional[timedelta] = None)
         "iat": datetime.utcnow(),
         "jti": str(uuid.uuid4()),
         "type": "access",
+        "role": role,
     }
     return jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
 
@@ -43,6 +44,17 @@ def decode_access_token(token: str) -> Optional[str]:
         return subject if subject else None
     except JWTError:
         return None
+
+
+def decode_token_role(token: str) -> str:
+    """Decode JWT and return the role claim; defaults to 'user' on any error."""
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        if payload.get("type") != "access":
+            return "user"
+        return payload.get("role", "user")
+    except JWTError:
+        return "user"
 
 
 def create_refresh_token(subject: str, expires_delta: Optional[timedelta] = None) -> str:
