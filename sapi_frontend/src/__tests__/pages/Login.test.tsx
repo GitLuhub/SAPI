@@ -38,7 +38,7 @@ function renderLogin() {
 // ---------------------------------------------------------------------------
 
 describe('LoginPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('renderiza el formulario de login con campos usuario y contraseña', () => {
     renderLogin();

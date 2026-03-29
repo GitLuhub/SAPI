@@ -36,7 +36,7 @@ const mockDocument = {
 // useDocumentDetail
 // ---------------------------------------------------------------------------
 describe('useDocumentDetail', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('carga los datos del documento cuando hay documentId', async () => {
     vi.mocked(documentsApi.getDocumentData).mockResolvedValue(mockDocument as any);
@@ -78,7 +78,7 @@ describe('useDocumentDetail', () => {
 // useDocumentFieldUpdate
 // ---------------------------------------------------------------------------
 describe('useDocumentFieldUpdate', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('llama a updateDocumentData y muestra toast de éxito', async () => {
     const toast = (await import('react-hot-toast')).default;

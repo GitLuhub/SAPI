@@ -16,6 +16,8 @@ export interface DocumentFilters {
   status?: DocumentStatus;
   document_type_id?: string;
   search_query?: string;
+  date_from?: string;
+  date_to?: string;
 }
 
 export const documentsApi = {
@@ -26,6 +28,8 @@ export const documentsApi = {
     if (filters.status) params.append('status', filters.status);
     if (filters.document_type_id) params.append('document_type_id', filters.document_type_id);
     if (filters.search_query) params.append('search_query', filters.search_query);
+    if (filters.date_from) params.append('date_from', filters.date_from);
+    if (filters.date_to) params.append('date_to', filters.date_to);
 
     const response = await apiClient.get<PaginatedResponse<Document>>('/documents/', { params });
     return response.data;

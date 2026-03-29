@@ -31,7 +31,7 @@ const createWrapper = () => {
 // useDocumentList
 // ---------------------------------------------------------------------------
 describe('useDocumentList', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('llama a listDocuments con los parámetros correctos', async () => {
     const mockData = { items: [], total: 0, page: 1, size: 10, pages: 0 };
@@ -101,7 +101,7 @@ describe('useDocumentList', () => {
 // useDocumentTypes
 // ---------------------------------------------------------------------------
 describe('useDocumentTypes', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('retorna tipos de documento de la API', async () => {
     const types = [{ id: '1', name: 'Factura', is_active: true }];
@@ -118,7 +118,7 @@ describe('useDocumentTypes', () => {
 // useDocumentUpload
 // ---------------------------------------------------------------------------
 describe('useDocumentUpload', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('llama a uploadDocument y muestra toast de éxito', async () => {
     const toast = (await import('react-hot-toast')).default;

@@ -93,7 +93,7 @@ function renderDetail() {
 // ---------------------------------------------------------------------------
 
 describe('DocumentDetailPage', () => {
-  beforeEach(() => vi.clearAllMocks());
+  beforeEach(() => { vi.clearAllMocks(); });
 
   it('no muestra el contenido del documento mientras carga', () => {
     vi.mocked(documentsApi.getDocumentData).mockReturnValue(new Promise(() => {}));
