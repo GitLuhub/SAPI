@@ -166,7 +166,7 @@ SAPI/
 │   └── Dockerfile                # Configuración de contenedor Frontend
 ├── nginx/                        # Configuración del Proxy Inverso
 ├── docker-compose.yml            # Orquestación de contenedores
-└── PLAN_CORRECCIONES_...md       # Documento de diseño y arquitectura
+└── docker-compose.monitoring.yml # Prometheus + Grafana + Flower
 ```
 
 ---
