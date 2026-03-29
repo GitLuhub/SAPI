@@ -415,6 +415,16 @@ async def list_document_types(
         return cached
 
     types = crud_document.list_active_types(db)
-    serialized = [{"id": str(t.id), "name": t.name, "description": t.description, "is_active": t.is_active} for t in types]
+    serialized = [
+        {
+            "id": str(t.id),
+            "name": t.name,
+            "description": t.description,
+            "is_active": t.is_active,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+            "updated_at": t.updated_at.isoformat() if t.updated_at else None,
+        }
+        for t in types
+    ]
     cache_service.set(_DOCUMENT_TYPES_CACHE_KEY, serialized)
     return types
