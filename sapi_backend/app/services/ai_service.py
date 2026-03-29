@@ -1,9 +1,10 @@
 import json
 import logging
+import time
 from typing import Dict, List, Optional, Tuple
 
-import google.generativeai as genai
-import google.ai.generativelanguage as glm
+from google import genai
+from google.genai import types
 
 from app.core.config import settings
 
@@ -31,6 +32,10 @@ CONTRATO_FIELDS = [
     ("clausulas_clave", "Cláusulas Clave"),
 ]
 
+_MODEL = "gemini-2.5-flash"
+_MAX_FAILURES = 3
+_CIRCUIT_OPEN_DURATION = 120  # segundos
+
 
 class GeminiAIService:
     def __init__(self):
@@ -38,8 +43,39 @@ class GeminiAIService:
             logger.warning("GEMINI_API_KEY not configured. AI features will be limited.")
             self.client = None
         else:
-            genai.configure(api_key=settings.GEMINI_API_KEY)
-            self.client = genai.GenerativeModel('gemini-2.5-flash')
+            self.client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+        # Circuit breaker state (por instancia)
+        self._failure_count: int = 0
+        self._last_failure_time: Optional[float] = None
+
+    # ------------------------------------------------------------------
+    # Circuit breaker helpers
+    # ------------------------------------------------------------------
+
+    def _is_circuit_open(self) -> bool:
+        """Devuelve True si el circuit breaker está abierto."""
+        if self._failure_count < _MAX_FAILURES:
+            return False
+        elapsed = time.time() - (self._last_failure_time or 0)
+        if elapsed < _CIRCUIT_OPEN_DURATION:
+            return True
+        # Ventana expirada → resetear
+        self._failure_count = 0
+        self._last_failure_time = None
+        return False
+
+    def _record_success(self) -> None:
+        self._failure_count = 0
+        self._last_failure_time = None
+
+    def _record_failure(self) -> None:
+        self._failure_count += 1
+        self._last_failure_time = time.time()
+
+    # ------------------------------------------------------------------
+    # JSON parsing helper
+    # ------------------------------------------------------------------
 
     def _parse_json_response(self, response_text: str) -> Dict:
         try:
@@ -58,6 +94,10 @@ class GeminiAIService:
                 logger.debug(f"Response text: {response_text[:500]}")
                 raise ValueError("Invalid JSON response from AI model")
 
+    # ------------------------------------------------------------------
+    # Core API call (con circuit breaker)
+    # ------------------------------------------------------------------
+
     def _call_gemini(
         self,
         prompt: str,
@@ -67,16 +107,34 @@ class GeminiAIService:
         if not self.client:
             raise RuntimeError("Gemini client not configured")
 
+        if self._is_circuit_open():
+            raise RuntimeError(
+                "Gemini circuit breaker is open — service temporarily unavailable"
+            )
+
+        if image_bytes and image_mime_type:
+            contents = [
+                types.Part.from_bytes(data=image_bytes, mime_type=image_mime_type),
+                prompt,
+            ]
+        else:
+            contents = [prompt]
+
         try:
-            if image_bytes and image_mime_type:
-                blob = glm.Blob(mime_type=image_mime_type, data=image_bytes)
-                response = self.client.generate_content([prompt, blob])
-            else:
-                response = self.client.generate_content(prompt)
+            response = self.client.models.generate_content(
+                model=_MODEL,
+                contents=contents,
+            )
+            self._record_success()
             return response.text
         except Exception as e:
+            self._record_failure()
             logger.error(f"Error calling Gemini API: {e}")
             raise
+
+    # ------------------------------------------------------------------
+    # Public service methods
+    # ------------------------------------------------------------------
 
     def classify_document(
         self,

@@ -229,7 +229,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | Precisión clasificación IA | >90% | ✅ Verificado en producción (0.95–0.99) |
 | Tiempo procesamiento | <30s/documento | ❓ Sin medir formalmente |
 | Tiempo respuesta API | <500ms | ❓ Sin medir formalmente |
-| Cobertura de tests (backend) | 100% | ✅ 191 tests |
+| Cobertura de tests (backend) | 100% | ✅ 228 tests |
 | Cobertura de tests (frontend) | >80% | ✅ 49 tests, 92.85% funciones |
 | Reducción trabajo manual | -70% | ❓ Sin medir |
 | Volumen objetivo | 10 000 docs/mes | ❓ Sin test de carga |
@@ -492,24 +492,24 @@ Requisitos del PRD marcados como ausentes o parciales en el informe.
 
 ---
 
-### Sprint I — Migración y Deuda Técnica (estimado: 2 sesiones)
+### Sprint I — Migración y Deuda Técnica ✅ COMPLETO
 
-- [ ] **I1. Migrar `google.generativeai` a `google.genai`**
+- [x] **I1. Migrar `google.generativeai` a `google.genai`**
   - La librería `google-generativeai` está deprecada (FutureWarning en cada arranque).
   - Actualizar `requirements.txt` y refactorizar `ai_service.py` a la nueva API.
   - Los tests de `test_gemini_service.py` deben actualizarse en consecuencia.
 
-- [ ] **I2. Implementar Repository Pattern en `app/crud/`**
+- [x] **I2. Implementar Repository Pattern en `app/crud/`**
   - Crear `CRUDDocument`, `CRUDExtractedData`, `CRUDUser` con operaciones comunes.
   - Mover la lógica de BD de `documents.py`, `users.py` a las clases CRUD.
   - Permite testear la lógica de negocio sin pasar por la capa HTTP.
 
-- [ ] **I3. Implementar Circuit Breaker para Gemini API**
+- [x] **I3. Implementar Circuit Breaker para Gemini API**
   - Agregar `tenacity` a `requirements.txt`.
   - En `ai_service.py`: si Gemini falla 3 veces consecutivas, abrir el circuito y retornar fallback durante 2 minutos sin llamar a la API.
   - Previene saturar la API de Google y acumular reintentos en cola.
 
-- [ ] **I4. Agregar backoff exponencial en reintentos de Celery**
+- [x] **I4. Agregar backoff exponencial en reintentos de Celery**
   - Actualmente `default_retry_delay=60` (fijo).
   - Cambiar a: `countdown = 60 * (2 ** self.request.retries)` → 60s, 120s, 240s.
 

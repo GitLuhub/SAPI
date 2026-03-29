@@ -12,6 +12,7 @@ from app.services.cache_service import cache_service
 
 from app.api.v1.deps import get_db, get_current_user, check_document_access, check_document_write_access
 from app.core.audit import log_action
+from app.crud import crud_document, crud_extracted_data
 from app.schemas.document import (
     DocumentResponse, DocumentListResponse, DocumentStatusResponse,
     DocumentDetailResponse, DocumentTypeResponse, ExtractedFieldResponse,
@@ -59,27 +60,16 @@ async def list_documents(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> PaginatedResponse:
-    query = db.query(Document).options(joinedload(Document.document_type))
-
-    if status_filter:
-        query = query.filter(Document.status == status_filter.value)
-
-    if document_type_id:
-        query = query.filter(Document.document_type_id == document_type_id)
-
-    if search_query:
-        query = query.filter(Document.original_filename.ilike(f"%{search_query}%"))
-
-    if date_from:
-        query = query.filter(Document.created_at >= datetime.combine(date_from, datetime.min.time()))
-
-    if date_to:
-        query = query.filter(Document.created_at <= datetime.combine(date_to, datetime.max.time()))
-
-    total = query.count()
-
-    offset = (page - 1) * size
-    documents = query.order_by(Document.created_at.desc()).offset(offset).limit(size).all()
+    documents, total = crud_document.list_filtered(
+        db,
+        status_filter=status_filter.value if status_filter else None,
+        document_type_id=document_type_id,
+        search_query=search_query,
+        date_from=date_from,
+        date_to=date_to,
+        page=page,
+        size=size,
+    )
 
     items = [
         DocumentListResponse(
@@ -110,7 +100,7 @@ async def upload_document(
     validate_file(file)
 
     if document_type_id is not None:
-        if not db.query(DocumentType).filter(DocumentType.id == document_type_id, DocumentType.is_active == True).first():
+        if not crud_document.get_type_by_id(db, document_type_id):
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail=f"Document type '{document_type_id}' not found or inactive",
@@ -148,8 +138,8 @@ async def upload_document(
         upload_user_id=current_user.id,
         document_type_id=document_type_id
     )
-    
-    db.add(document)
+
+    crud_document.add(db, document)
     log_action(
         db,
         action="document.upload",
@@ -185,7 +175,7 @@ async def get_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> Document:
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = crud_document.get(db, document_id)
     if not document:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -201,7 +191,7 @@ async def get_document_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> DocumentStatusResponse:
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = crud_document.get(db, document_id)
     if not document:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -230,7 +220,7 @@ async def get_document_data(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> DocumentDetailResponse:
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = crud_document.get(db, document_id)
     if not document:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -241,10 +231,8 @@ async def get_document_data(
     doc_type = None
     if document.document_type_id:
         doc_type = db.query(DocumentType).filter(DocumentType.id == document.document_type_id).first()
-    
-    extracted_fields = db.query(ExtractedData).filter(
-        ExtractedData.document_id == document_id
-    ).all()
+
+    extracted_fields = crud_extracted_data.get_by_document(db, document_id)
     
     from app.schemas.document import ExtractedFieldResponse
     fields = [
@@ -296,7 +284,7 @@ async def update_document_data(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> MessageResponse:
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = crud_document.get(db, document_id)
     if not document:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -305,16 +293,9 @@ async def update_document_data(
     check_document_write_access(current_user)
 
     for update in updates.updates:
-        extracted_field = db.query(ExtractedData).filter(
-            ExtractedData.document_id == document_id,
-            ExtractedData.field_name == update.field_name
-        ).first()
-        
+        extracted_field = crud_extracted_data.get_field(db, document_id, update.field_name)
         if extracted_field:
-            extracted_field.final_value = update.new_value
-            extracted_field.is_corrected = True
-            extracted_field.corrected_by_user_id = current_user.id
-            extracted_field.corrected_at = datetime.utcnow()
+            crud_extracted_data.update_field(db, extracted_field, update.new_value, current_user.id)
         else:
             new_field = ExtractedData(
                 document_id=document_id,
@@ -324,15 +305,10 @@ async def update_document_data(
                 corrected_by_user_id=current_user.id,
                 corrected_at=datetime.utcnow()
             )
-            db.add(new_field)
-    
+            crud_extracted_data.add(db, new_field)
+
     if document.status == DocumentStatus.REVIEW_NEEDED.value:
-        review_needed_count = db.query(ExtractedData).filter(
-            ExtractedData.document_id == document_id,
-            ExtractedData.is_corrected == False
-        ).count()
-        
-        if review_needed_count == 0:
+        if crud_extracted_data.count_uncorrected(db, document_id) == 0:
             document.status = DocumentStatus.PROCESSED.value
     
     log_action(
@@ -354,7 +330,7 @@ async def download_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ) -> dict:
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = crud_document.get(db, document_id)
     if not document:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -381,7 +357,7 @@ async def preview_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict:
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = crud_document.get(db, document_id)
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     check_document_access(document, current_user)
@@ -403,7 +379,7 @@ async def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
-    document = db.query(Document).filter(Document.id == document_id).first()
+    document = crud_document.get(db, document_id)
     if not document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     check_document_access(document, current_user)
@@ -422,7 +398,7 @@ async def delete_document(
         entity_id=str(document_id),
         details=f"filename={document.original_filename}",
     )
-    db.delete(document)
+    crud_document.delete(db, document)
     db.commit()
 
 
@@ -438,7 +414,7 @@ async def list_document_types(
     if cached is not None:
         return cached
 
-    types = db.query(DocumentType).filter(DocumentType.is_active == True).all()
+    types = crud_document.list_active_types(db)
     serialized = [{"id": str(t.id), "name": t.name, "description": t.description, "is_active": t.is_active} for t in types]
     cache_service.set(_DOCUMENT_TYPES_CACHE_KEY, serialized)
     return types

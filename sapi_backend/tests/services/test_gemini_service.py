@@ -1,6 +1,21 @@
+import time
 import pytest
 from unittest.mock import patch, MagicMock
 from app.services.ai_service import GeminiAIService
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _make_service(mock_genai):
+    """Crea una instancia con cliente mockeado."""
+    return GeminiAIService()
+
+
+def _set_response(mock_genai, text: str):
+    """Configura el mock para devolver `text` como respuesta de generate_content."""
+    mock_genai.Client.return_value.models.generate_content.return_value.text = text
 
 
 # ---------------------------------------------------------------------------
@@ -9,11 +24,9 @@ from app.services.ai_service import GeminiAIService
 
 @patch("app.services.ai_service.genai")
 def test_gemini_service_classification(mock_genai):
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = '{"tipo": "Factura de Proveedor", "confianza": 0.98}'
-    mock_genai.GenerativeModel.return_value = mock_model
+    _set_response(mock_genai, '{"tipo": "Factura de Proveedor", "confianza": 0.98}')
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     doc_type, confidence = service.classify_document("Some invoice text")
 
     assert doc_type == "Factura de Proveedor"
@@ -21,7 +34,7 @@ def test_gemini_service_classification(mock_genai):
 
 
 def test_classify_document_no_client():
-    """When client is None (no API key), returns a default value without crashing."""
+    """Cuando no hay API key, devuelve valor por defecto sin crashear."""
     with patch("app.services.ai_service.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = None
         service = GeminiAIService()
@@ -33,11 +46,9 @@ def test_classify_document_no_client():
 
 @patch("app.services.ai_service.genai")
 def test_classify_document_api_error_returns_fallback(mock_genai):
-    mock_model = MagicMock()
-    mock_model.generate_content.side_effect = Exception("API unavailable")
-    mock_genai.GenerativeModel.return_value = mock_model
+    mock_genai.Client.return_value.models.generate_content.side_effect = Exception("API unavailable")
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     doc_type, confidence = service.classify_document("text")
 
     assert doc_type == "Factura de Proveedor"
@@ -46,12 +57,10 @@ def test_classify_document_api_error_returns_fallback(mock_genai):
 
 @patch("app.services.ai_service.genai")
 def test_classify_document_confidence_above_1_normalized(mock_genai):
-    """Confidence > 1 (e.g. percentage 98) should be normalised to 0-1."""
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = '{"tipo": "Contrato Simple", "confianza": 98}'
-    mock_genai.GenerativeModel.return_value = mock_model
+    """Confianza > 1 (ej: porcentaje 98) se normaliza a 0-1."""
+    _set_response(mock_genai, '{"tipo": "Contrato Simple", "confianza": 98}')
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     _, confidence = service.classify_document("contract text")
     assert float(confidence) <= 1.0
 
@@ -62,13 +71,12 @@ def test_classify_document_confidence_above_1_normalized(mock_genai):
 
 @patch("app.services.ai_service.genai")
 def test_gemini_service_extract_entities(mock_genai):
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = (
-        '{"campos": [{"nombre": "numero_factura", "valor": "INV-123", "confianza": 0.95}]}'
+    _set_response(
+        mock_genai,
+        '{"campos": [{"nombre": "numero_factura", "valor": "INV-123", "confianza": 0.95}]}',
     )
-    mock_genai.GenerativeModel.return_value = mock_model
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     entities = service.extract_entities("Invoice content", "Factura de Proveedor")
 
     assert len(entities) == 1
@@ -79,13 +87,12 @@ def test_gemini_service_extract_entities(mock_genai):
 
 @patch("app.services.ai_service.genai")
 def test_extract_entities_contrato_type(mock_genai):
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = (
-        '{"campos": [{"nombre": "partes_involucradas", "valor": "Empresa A y B", "confianza": 0.88}]}'
+    _set_response(
+        mock_genai,
+        '{"campos": [{"nombre": "partes_involucradas", "valor": "Empresa A y B", "confianza": 0.88}]}',
     )
-    mock_genai.GenerativeModel.return_value = mock_model
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     entities = service.extract_entities("Contract content", "Contrato Simple")
 
     assert len(entities) == 1
@@ -103,11 +110,9 @@ def test_extract_entities_no_client():
 
 @patch("app.services.ai_service.genai")
 def test_extract_entities_api_error_returns_empty(mock_genai):
-    mock_model = MagicMock()
-    mock_model.generate_content.side_effect = Exception("timeout")
-    mock_genai.GenerativeModel.return_value = mock_model
+    mock_genai.Client.return_value.models.generate_content.side_effect = Exception("timeout")
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     result = service.extract_entities("text", "Factura de Proveedor")
     assert result == []
 
@@ -118,11 +123,9 @@ def test_extract_entities_api_error_returns_empty(mock_genai):
 
 @patch("app.services.ai_service.genai")
 def test_summarize_document(mock_genai):
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = "  Este contrato establece los términos.  "
-    mock_genai.GenerativeModel.return_value = mock_model
+    _set_response(mock_genai, "  Este contrato establece los términos.  ")
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     summary = service.summarize_document("contract content")
 
     assert summary == "Este contrato establece los términos."
@@ -139,11 +142,9 @@ def test_summarize_document_no_client():
 
 @patch("app.services.ai_service.genai")
 def test_summarize_document_api_error_returns_fallback(mock_genai):
-    mock_model = MagicMock()
-    mock_model.generate_content.side_effect = Exception("error")
-    mock_genai.GenerativeModel.return_value = mock_model
+    mock_genai.Client.return_value.models.generate_content.side_effect = Exception("error")
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     summary = service.summarize_document("text")
     assert "error" in summary.lower()
 
@@ -154,42 +155,38 @@ def test_summarize_document_api_error_returns_fallback(mock_genai):
 
 @patch("app.services.ai_service.genai")
 def test_parse_json_markdown_wrapper(mock_genai):
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = (
-        "```json\n{\"tipo\": \"Factura de Proveedor\", \"confianza\": 0.9}\n```"
+    _set_response(
+        mock_genai,
+        '```json\n{"tipo": "Factura de Proveedor", "confianza": 0.9}\n```',
     )
-    mock_genai.GenerativeModel.return_value = mock_model
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     doc_type, confidence = service.classify_document("invoice text")
     assert doc_type == "Factura de Proveedor"
     assert confidence == "0.9"
 
 
 # ---------------------------------------------------------------------------
-# _parse_json_response — fully unparseable JSON (lines 56-59)
+# _parse_json_response — JSON completamente inválido
 # ---------------------------------------------------------------------------
 
 @patch("app.services.ai_service.genai")
 def test_parse_json_response_invalid_raises_value_error(mock_genai):
-    """Both JSON parse attempts fail → ValueError raised (lines 56-59)."""
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = "this is definitely not json at all!!!"
-    mock_genai.GenerativeModel.return_value = mock_model
+    """Ambos intentos de parseo JSON fallan → classify devuelve fallback."""
+    _set_response(mock_genai, "this is definitely not json at all!!!")
 
-    service = GeminiAIService()
-    # classify_document catches ValueError and returns fallback
+    service = _make_service(mock_genai)
     doc_type, confidence = service.classify_document("text")
     assert doc_type == "Factura de Proveedor"
     assert confidence == "0.50"
 
 
 # ---------------------------------------------------------------------------
-# _call_gemini — no client configured (line 63)
+# _call_gemini — sin cliente configurado
 # ---------------------------------------------------------------------------
 
 def test_call_gemini_no_client_raises_runtime_error():
-    """_call_gemini raises RuntimeError when client is None."""
+    """_call_gemini lanza RuntimeError cuando client es None."""
     with patch("app.services.ai_service.settings") as mock_settings:
         mock_settings.GEMINI_API_KEY = None
         service = GeminiAIService()
@@ -199,75 +196,126 @@ def test_call_gemini_no_client_raises_runtime_error():
 
 
 # ---------------------------------------------------------------------------
-# Multimodal — image bytes passed to Gemini
+# Multimodal — image bytes passed to Gemini (nueva API con types.Part)
 # ---------------------------------------------------------------------------
 
 @patch("app.services.ai_service.genai")
-@patch("app.services.ai_service.glm")
-def test_call_gemini_with_image_bytes(mock_glm, mock_genai):
-    """_call_gemini constructs a Blob and passes it alongside the prompt."""
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = "image response"
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_blob = MagicMock()
-    mock_glm.Blob.return_value = mock_blob
+@patch("app.services.ai_service.types")
+def test_call_gemini_with_image_bytes(mock_types, mock_genai):
+    """_call_gemini construye types.Part y lo pasa junto al prompt."""
+    mock_part = MagicMock()
+    mock_types.Part.from_bytes.return_value = mock_part
+    mock_genai.Client.return_value.models.generate_content.return_value.text = "image response"
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     result = service._call_gemini("describe this", b"\x89PNG", "image/png")
 
-    mock_glm.Blob.assert_called_once_with(mime_type="image/png", data=b"\x89PNG")
-    mock_model.generate_content.assert_called_once_with(["describe this", mock_blob])
+    mock_types.Part.from_bytes.assert_called_once_with(data=b"\x89PNG", mime_type="image/png")
+    mock_genai.Client.return_value.models.generate_content.assert_called_once_with(
+        model="gemini-2.5-flash",
+        contents=[mock_part, "describe this"],
+    )
     assert result == "image response"
 
 
 @patch("app.services.ai_service.genai")
-@patch("app.services.ai_service.glm")
-def test_classify_document_with_image(mock_glm, mock_genai):
-    """classify_document passes image_bytes and image_mime_type to _call_gemini."""
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = '{"tipo": "Factura de Proveedor", "confianza": 0.92}'
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_glm.Blob.return_value = MagicMock()
+@patch("app.services.ai_service.types")
+def test_classify_document_with_image(mock_types, mock_genai):
+    """classify_document pasa image_bytes a _call_gemini."""
+    mock_types.Part.from_bytes.return_value = MagicMock()
+    _set_response(mock_genai, '{"tipo": "Factura de Proveedor", "confianza": 0.92}')
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     doc_type, confidence = service.classify_document("", b"\x89PNG", "image/png")
 
     assert doc_type == "Factura de Proveedor"
     assert float(confidence) == 0.92
-    mock_glm.Blob.assert_called_once()
+    mock_types.Part.from_bytes.assert_called_once()
 
 
 @patch("app.services.ai_service.genai")
-@patch("app.services.ai_service.glm")
-def test_extract_entities_with_image(mock_glm, mock_genai):
-    """extract_entities uses image-specific prompt when image_bytes provided."""
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = (
-        '{"campos": [{"nombre": "numero_factura", "valor": "F-001", "confianza": 0.93}]}'
+@patch("app.services.ai_service.types")
+def test_extract_entities_with_image(mock_types, mock_genai):
+    """extract_entities usa prompt de imagen cuando se proporcionan image_bytes."""
+    mock_types.Part.from_bytes.return_value = MagicMock()
+    _set_response(
+        mock_genai,
+        '{"campos": [{"nombre": "numero_factura", "valor": "F-001", "confianza": 0.93}]}',
     )
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_glm.Blob.return_value = MagicMock()
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     entities = service.extract_entities("", "Factura de Proveedor", b"\xff\xd8\xff", "image/jpeg")
 
     assert len(entities) == 1
     assert entities[0]["field_name"] == "numero_factura"
     assert entities[0]["ai_extracted_value"] == "F-001"
-    mock_glm.Blob.assert_called_once()
+    mock_types.Part.from_bytes.assert_called_once()
 
 
 @patch("app.services.ai_service.genai")
-@patch("app.services.ai_service.glm")
-def test_summarize_document_with_image(mock_glm, mock_genai):
-    """summarize_document passes image bytes to _call_gemini."""
-    mock_model = MagicMock()
-    mock_model.generate_content.return_value.text = "Factura de servicios de consultoría."
-    mock_genai.GenerativeModel.return_value = mock_model
-    mock_glm.Blob.return_value = MagicMock()
+@patch("app.services.ai_service.types")
+def test_summarize_document_with_image(mock_types, mock_genai):
+    """summarize_document pasa image bytes a _call_gemini."""
+    mock_types.Part.from_bytes.return_value = MagicMock()
+    _set_response(mock_genai, "Factura de servicios de consultoría.")
 
-    service = GeminiAIService()
+    service = _make_service(mock_genai)
     summary = service.summarize_document("", b"\xff\xd8\xff", "image/jpeg")
 
     assert summary == "Factura de servicios de consultoría."
-    mock_glm.Blob.assert_called_once()
+    mock_types.Part.from_bytes.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Circuit Breaker (I3)
+# ---------------------------------------------------------------------------
+
+@patch("app.services.ai_service.genai")
+def test_circuit_breaker_opens_after_max_failures(mock_genai):
+    """Tras 3 fallos, el circuito se abre y las llamadas se rechazan sin tocar la API."""
+    mock_genai.Client.return_value.models.generate_content.side_effect = Exception("API down")
+
+    service = _make_service(mock_genai)
+    # Producir 3 fallos consecutivos
+    for _ in range(3):
+        try:
+            service._call_gemini("test")
+        except Exception:
+            pass
+
+    assert service._failure_count == 3
+
+    # La siguiente llamada debe fallar con circuit breaker, sin llamar a la API
+    api_call_count_before = mock_genai.Client.return_value.models.generate_content.call_count
+    with pytest.raises(RuntimeError, match="circuit breaker"):
+        service._call_gemini("test")
+    assert mock_genai.Client.return_value.models.generate_content.call_count == api_call_count_before
+
+
+@patch("app.services.ai_service.genai")
+def test_circuit_breaker_resets_on_success(mock_genai):
+    """Una llamada exitosa resetea el contador de fallos."""
+    _set_response(mock_genai, '{"tipo": "Factura de Proveedor", "confianza": 0.9}')
+
+    service = _make_service(mock_genai)
+    service._failure_count = 2  # Dos fallos previos
+
+    service._call_gemini("prompt")  # Llamada exitosa
+
+    assert service._failure_count == 0
+    assert service._last_failure_time is None
+
+
+@patch("app.services.ai_service.genai")
+def test_circuit_breaker_resets_after_duration(mock_genai):
+    """Tras expirar la ventana de 2 minutos, el circuito se cierra automáticamente."""
+    _set_response(mock_genai, "OK")
+
+    service = _make_service(mock_genai)
+    service._failure_count = 3
+    service._last_failure_time = time.time() - 121  # 2 min + 1 s atrás
+
+    # No debe lanzar circuit breaker
+    result = service._call_gemini("test")
+    assert result == "OK"
+    assert service._failure_count == 0  # Reseteado en _is_circuit_open + éxito

@@ -15,7 +15,8 @@ bcrypt
 celery
 redis
 
-google-generativeai
+google-genai
+tenacity
 
 boto3
 

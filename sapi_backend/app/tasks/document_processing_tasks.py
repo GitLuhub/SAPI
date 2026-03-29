@@ -153,7 +153,7 @@ def process_document_task(self, document_id: str) -> dict:
             document.processing_completed_at = datetime.utcnow()
             db.commit()
         
-        raise self.retry(exc=exc)
+        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
     
     finally:
         db.close()

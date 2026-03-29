@@ -4,6 +4,7 @@ from typing import List
 from uuid import UUID
 
 from app.api.v1.deps import get_db, get_current_user, get_current_superuser
+from app.crud import crud_user
 from app.schemas.user import UserCreate, UserUpdate, UserResponse
 from app.schemas.common import PaginatedResponse
 from app.db.models.user import User
@@ -27,16 +28,12 @@ async def create_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_superuser)
 ) -> User:
-    user = db.query(User).filter(
-        (User.username == user_in.username) | (User.email == user_in.email)
-    ).first()
-    
-    if user:
+    if crud_user.get_by_username_or_email(db, user_in.username, user_in.email):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="User with this username or email already exists"
         )
-    
+
     user = User(
         username=user_in.username,
         email=user_in.email,
@@ -46,8 +43,8 @@ async def create_user(
         is_active=True,
         is_superuser=False
     )
-    
-    db.add(user)
+
+    crud_user.add(db, user)
     log_action(
         db,
         action="user.create",
@@ -69,9 +66,7 @@ async def list_users(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_superuser),
 ) -> PaginatedResponse:
-    total = db.query(User).count()
-    offset = (page - 1) * size
-    users = db.query(User).offset(offset).limit(size).all()
+    users, total = crud_user.list_paginated(db, page=page, size=size)
     pages = (total + size - 1) // size if size > 0 else 0
     return PaginatedResponse(items=users, total=total, page=page, size=size, pages=pages)
 
@@ -82,7 +77,7 @@ async def get_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_superuser)
 ) -> User:
-    user = db.query(User).filter(User.id == user_id).first()
+    user = crud_user.get(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -98,25 +93,22 @@ async def update_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_superuser)
 ) -> User:
-    user = db.query(User).filter(User.id == user_id).first()
+    user = crud_user.get(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    
+
     update_data = user_in.model_dump(exclude_unset=True)
-    
+
     if "password" in update_data:
         update_data["hashed_password"] = get_password_hash(update_data.pop("password"))
-    
+
     if "role" in update_data and update_data["role"]:
         update_data["role"] = update_data["role"].value
-    
-    for field, value in update_data.items():
-        setattr(user, field, value)
-    
-    db.add(user)
+
+    crud_user.update(db, user, update_data)
     log_action(
         db,
         action="user.update",
@@ -137,13 +129,13 @@ async def delete_user(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_superuser)
 ) -> None:
-    user = db.query(User).filter(User.id == user_id).first()
+    user = crud_user.get(db, user_id)
     if not user:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
-    
+
     log_action(
         db,
         action="user.delete",
@@ -152,5 +144,5 @@ async def delete_user(
         entity_id=str(user_id),
         details=f"username={user.username}",
     )
-    db.delete(user)
+    crud_user.delete(db, user)
     db.commit()
