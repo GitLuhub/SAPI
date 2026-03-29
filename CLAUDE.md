@@ -217,7 +217,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | **Fase 1** — Backend Core | ✅ Completa | JWT auth + refresh, CRUD documentos, storage S3/local, modelos DB |
 | **Fase 2** — IA/Workers | ✅ Completa | Gemini integrado, Celery con reintentos, extracción de entidades |
 | **Fase 3** — Frontend | ✅ Completa | Login, Dashboard, DocumentDetail, upload, corrección HIL, PDF viewer |
-| **Fase 4** — Testing | ✅ Completa | 191 tests, cobertura 100% backend (pytest --cov --fail-under=80) |
+| **Fase 4** — Testing | ✅ Completa | 191 backend + 49 frontend, coberturas >80% |
 | **Fase 5** — Hardening | 🔄 En curso | Ver plan de producción más abajo |
 
 ---
@@ -230,7 +230,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | Tiempo procesamiento | <30s/documento | ❓ Sin medir formalmente |
 | Tiempo respuesta API | <500ms | ❓ Sin medir formalmente |
 | Cobertura de tests (backend) | 100% | ✅ 191 tests |
-| Cobertura de tests (frontend) | >80% | ❌ 0% (sin tests) |
+| Cobertura de tests (frontend) | >80% | ✅ 49 tests, 92.85% funciones |
 | Reducción trabajo manual | -70% | ❓ Sin medir |
 | Volumen objetivo | 10 000 docs/mes | ❓ Sin test de carga |
 
@@ -470,28 +470,25 @@ Requisitos del PRD marcados como ausentes o parciales en el informe.
 
 ---
 
-### Sprint H — Tests de Integración y Frontend (estimado: 2 sesiones)
+### Sprint H — Tests de Integración y Frontend ✅ COMPLETO
 
-- [ ] **H1. Agregar fixture de PostgreSQL real en `conftest.py`**
-  - Agregar un perfil de tests con `pytest-docker` o instrucciones para levantar PostgreSQL antes de correr tests de integración.
-  - Marcar con `@pytest.mark.integration` los tests que requieren PostgreSQL real.
-  - Objetivo: capturar constraint violations y comportamientos específicos de Postgres que SQLite no reproduce.
+- [x] **H1. Agregar fixture de PostgreSQL real en `conftest.py`**
+  - `tests/integration/conftest.py`: fixtures `pg_engine`, `pg_session`, `pg_client` con rollback por test.
+  - `tests/integration/test_documents_pg.py`: 3 tests (UNIQUE constraint, upload+retrieve, audit log).
+  - Skipped por defecto; ejecutar con `pytest tests/integration/ --integration`.
 
-- [ ] **H2. Tests de carga con Locust**
-  - Archivo: `sapi_backend/locustfile.py`.
-  - Escenarios: carga simultánea de 10 documentos, 50 usuarios consultando el listado.
-  - Meta: verificar que la API responde en <500ms con 50 usuarios concurrentes.
+- [x] **H2. Tests de carga con Locust**
+  - `sapi_backend/locustfile.py`: SAPIReadUser (70%) + SAPIWriteUser (30%), reporte P50/P95/error rate.
+  - Ejecutar: `locust --headless -u 50 -r 5 --run-time 60s --host http://localhost/api/v1`.
 
-- [ ] **H3. Tests de frontend con Vitest + React Testing Library**
-  - Directorio: `sapi_frontend/src/__tests__/`.
-  - Prioridad: `Dashboard.tsx` (upload, filtros, paginación) y `DocumentDetail.tsx` (edición HIL, guardado).
-  - Meta: cobertura >80% del frontend.
+- [x] **H3. Tests de frontend con Vitest + React Testing Library**
+  - 49 tests en 5 archivos: Dashboard (15), DocumentDetail (16), Login (6), hooks (12).
+  - Cobertura: 99.85% líneas | 90.56% ramas | 92.85% funciones (umbral 80% superado).
+  - Ejecutar: `cd sapi_frontend && npm test` / `npm run test:coverage`.
 
-- [ ] **H4. Extraer lógica de fetching a custom hooks**
-  - `sapi_frontend/src/hooks/useDocumentList.ts`
-  - `sapi_frontend/src/hooks/useDocumentDetail.ts`
-  - `sapi_frontend/src/hooks/useDocumentUpload.ts`
-  - Separación de responsabilidades; facilita los tests H3.
+- [x] **H4. Extraer lógica de fetching a custom hooks**
+  - `sapi_frontend/src/hooks/useDocumentList.ts` — useDocumentList, useDocumentTypes, useDocumentUpload.
+  - `sapi_frontend/src/hooks/useDocumentDetail.ts` — useDocumentDetail, useDocumentFieldUpdate.
 
 ---
 
@@ -591,7 +588,7 @@ El MVP se considera listo para producción cuando:
 - [x] Backups automáticos de PostgreSQL (Sprint F2)
 - [x] Logs estructurados en JSON (Sprint F5)
 - [x] Al menos un dashboard de monitoreo operativo (Sprint G)
-- [ ] Tests de integración con PostgreSQL real (Sprint H1)
+- [x] Tests de integración con PostgreSQL real (Sprint H1)
 
 ---
 
