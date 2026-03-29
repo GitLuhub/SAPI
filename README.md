@@ -9,11 +9,14 @@
 ## 🚀 Características Principales
 
 *   **Clasificación Automática:** Identificación inteligente del tipo de documento (Ej. "Factura de Proveedor" vs "Contrato Simple") basada en su contenido con un umbral de confianza.
-*   **Extracción de Entidades con IA:** Extracción de campos clave (Nº de factura, fechas, importes, partes involucradas, cláusulas) utilizando Google Gemini 1.5 Pro.
+*   **Extracción de Entidades con IA:** Extracción de campos clave (Nº de factura, fechas, importes, partes involucradas, cláusulas) utilizando Google Gemini 2.5 Flash.
 *   **Resúmenes Ejecutivos:** Generación automática de resúmenes concisos del contenido del documento para revisión rápida.
 *   **Procesamiento Asíncrono:** Arquitectura robusta y escalable basada en workers de Celery y Redis para manejar altos volúmenes de documentos sin bloquear la API.
 *   **Revisión Humana (Human-in-the-Loop):** Panel de administración en React donde los usuarios pueden verificar, editar y aprobar los datos extraídos por la IA antes de darlos por procesados.
-*   **Almacenamiento Seguro:** Integración con proveedores de Object Storage (S3/GCS o Local) para guardar de forma segura los documentos originales.
+*   **Reintento Manual:** Los documentos en estado ERROR o REVIEW_NEEDED pueden reencolar manualmente desde la interfaz para reprocesamiento.
+*   **Exportación CSV/Excel:** Descarga de todos los campos extraídos en formato CSV o XLSX con filtros opcionales por estado y fecha.
+*   **Almacenamiento Seguro:** Integración con proveedores de Object Storage (AWS S3 o Local) para guardar de forma segura los documentos originales.
+*   **Rate Limiting por Rol:** Límites de subida diferenciados según rol (usuario: 10/min, revisor: 30/min, admin: sin límite efectivo).
 
 ---
 
@@ -23,20 +26,22 @@
 *   **Framework:** FastAPI (Python 3.13+)
 *   **Base de Datos:** PostgreSQL 15 (SQLAlchemy 2.0 + Alembic)
 *   **Procesamiento en Background:** Celery + Redis
-*   **Inteligencia Artificial:** Google Generative AI API (Gemini-1.5-Pro)
-*   **Autenticación:** JWT (JSON Web Tokens) con Passlib/Bcrypt
+*   **Inteligencia Artificial:** Google Gemini API (`google-genai`, modelo `gemini-2.5-flash`)
+*   **Autenticación:** JWT (access + refresh tokens) con Passlib/Bcrypt
+*   **Rate Limiting:** slowapi con límites diferenciados por rol
+*   **Monitoreo:** Prometheus + Grafana + Flower
 
 **Frontend:**
 *   **Framework:** React 18+ con TypeScript
 *   **Herramientas de Construcción:** Vite
 *   **Estilos:** Tailwind CSS
-*   **Estado & Data Fetching:** React Query + Zustand / Context API
+*   **Estado & Data Fetching:** React Query + Zustand
 *   **Enrutamiento:** React Router DOM
 
 **Infraestructura & DevOps:**
-*   **Contenedores:** Docker & Docker Compose
-*   **Proxy Inverso:** Nginx
-*   **Testing:** Pytest (Cobertura >80%)
+*   **Contenedores:** Docker & Docker Compose (8 servicios)
+*   **Proxy Inverso:** Nginx con HTTPS (TLS 1.2/1.3)
+*   **Testing:** Pytest 259 tests (99.93% cobertura) + Vitest 49 tests frontend
 
 ---
 
@@ -93,30 +98,47 @@ SAPI utiliza una arquitectura de microservicios contenerizados:
 
 ## 🧪 Ejecución de Pruebas (Testing)
 
-El proyecto cuenta con una suite completa de pruebas unitarias y de integración para el backend utilizando `pytest` y bases de datos en memoria (SQLite) para garantizar que la lógica de IA y procesamiento de documentos funcione correctamente.
+El proyecto cuenta con una suite completa de pruebas unitarias y de integración.
 
-Para ejecutar los tests localmente (fuera de Docker):
-
+**Backend (Pytest — 259 tests, 99.93% cobertura):**
 ```bash
 cd sapi_backend
-# Crear un entorno virtual e instalar dependencias
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
+python -m pytest --cov=app --cov-report=term-missing
+```
 
-# Ejecutar la suite de pruebas con cobertura
-./run_tests.sh --cov=app tests/
+**Frontend (Vitest — 49 tests, 92.85% cobertura de funciones):**
+```bash
+cd sapi_frontend
+npm install
+npm test             # modo watch
+npm run test:coverage  # con reporte de cobertura
+```
+
+**Tests de integración con PostgreSQL real (requiere Docker):**
+```bash
+cd sapi_backend
+pytest tests/integration/ --integration
+```
+
+**Tests de carga (Locust — 50 usuarios concurrentes):**
+```bash
+pip install locust
+locust --headless -u 50 -r 5 --run-time 60s \
+  --host http://localhost:8000/api/v1 -f locustfile.py
 ```
 
 ---
 
 ## 📖 Uso del Sistema (Flujo Principal)
 
-1.  **Registro/Login:** Accede al panel frontend e inicia sesión.
-2.  **Carga de Documentos:** Sube un archivo PDF, JPG o PNG desde el Dashboard. El sistema pondrá el documento en estado `UPLOADED`.
-3.  **Procesamiento IA:** El Celery Worker toma el documento, extrae el texto, llama a Gemini y clasifica el documento (Factura o Contrato). El estado cambia a `PROCESSING` y luego a `PROCESSED` (o `REVIEW_NEEDED` si la confianza de la IA es baja).
-4.  **Revisión:** Entra al detalle del documento en la interfaz. Verás el documento original a la izquierda y los datos extraídos (con su % de confianza) a la derecha.
-5.  **Corrección Manual:** Si la IA cometió un error, el operador puede editar el campo y guardarlo. El sistema registrará la intervención humana.
+1.  **Registro/Login:** Accede al panel frontend e inicia sesión (`admin / admin123` en local).
+2.  **Carga de Documentos:** Sube un archivo PDF, JPG o PNG desde el Dashboard (máx. 10 MB). El documento queda en estado `UPLOADED`.
+3.  **Procesamiento IA:** El Celery Worker descarga el documento, llama a Gemini y clasifica el contenido. El estado cambia a `PROCESSING` → `PROCESSED` (o `REVIEW_NEEDED` si confianza < 70%).
+4.  **Revisión HIL:** Abre el detalle del documento. Verás el original a la izquierda y los campos extraídos con su nivel de confianza a la derecha. Edita cualquier campo para corregirlo y pulsa "Guardar Cambios".
+5.  **Reintento:** Si el procesamiento falló (`ERROR`) o requiere revisión, el botón "Reintentar" reencolará el documento automáticamente.
+6.  **Exportación:** Desde el Dashboard, descarga todos los campos extraídos en **CSV** o **Excel** con un clic (respeta el filtro de estado activo).
 
 ---
 
@@ -159,5 +181,21 @@ SAPI/
 
 ---
 
-**SAPI (Sistema de Automatización y Procesamiento Documental Inteligente) - Versión 1.0.0**  
+## 📊 Estado del Proyecto
+
+| Componente | Estado |
+|---|---|
+| Backend API (FastAPI) | ✅ Producción |
+| Frontend React | ✅ Producción |
+| Procesamiento IA (Gemini) | ✅ Producción |
+| HTTPS / Nginx | ✅ Configurado |
+| Monitoreo (Prometheus/Grafana) | ✅ Operativo |
+| Tests backend | ✅ 259 tests / 99.93% cobertura |
+| Tests frontend | ✅ 49 tests / 92.85% funciones |
+| GDPR (exportación + borrado) | ✅ Implementado |
+| Sprint K (reprocess/export/rate) | ✅ Completo |
+
+---
+
+**SAPI (Sistema de Automatización y Procesamiento Documental Inteligente) - Versión 1.1.0**
 *Desarrollado para optimizar los flujos de trabajo documentales corporativos.*

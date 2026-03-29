@@ -45,6 +45,15 @@ uploads/
 sapi_backend/uploads/
 large_tool_results/
 test_document.pdf
+test.pdf
+
+# Locust — resultados de tests de carga
+locust_results*.csv
+locust_results*.html
+
+# Exportaciones generadas
+sapi_export.csv
+sapi_export.xlsx
 
 # Frontend Node.js
 node_modules/

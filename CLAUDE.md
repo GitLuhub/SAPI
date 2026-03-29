@@ -217,7 +217,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | **Fase 1** — Backend Core | ✅ Completa | JWT auth + refresh, CRUD documentos, storage S3/local, modelos DB |
 | **Fase 2** — IA/Workers | ✅ Completa | Gemini integrado, Celery con reintentos, extracción de entidades |
 | **Fase 3** — Frontend | ✅ Completa | Login, Dashboard, DocumentDetail, upload, corrección HIL, PDF viewer |
-| **Fase 4** — Testing | ✅ Completa | 239 backend + 49 frontend, coberturas >80% |
+| **Fase 4** — Testing | ✅ Completa | 259 backend + 49 frontend, coberturas >80% |
 | **Fase 5** — Hardening | ✅ Completa | Sprints A–J completados (GDPR, monitoring, perf, infra) |
 
 ---
@@ -601,25 +601,26 @@ Las siguientes 14 funcionalidades fueron identificadas tras completar la Fase 5.
 
 ---
 
-### Sprint K — Operaciones Esenciales (estimado: 1 sesión)
+### Sprint K — Operaciones Esenciales ✅ COMPLETO
 
 Funcionalidades de bajo esfuerzo y alto impacto que completan el ciclo de vida del documento.
 
-- [ ] **K1. Reintento manual de procesamiento**
+- [x] **K1. Reintento manual de procesamiento**
   - `POST /documents/{id}/reprocess` — reencola el documento en Celery si está en `ERROR` o `REVIEW_NEEDED`.
   - Solo propietario, reviewer o admin puede reencolar.
   - Registrar en `AuditLog` con acción `"document.reprocess"`.
-  - Agregar botón "Reintentar" en `DocumentDetail.tsx`.
+  - Botón "Reintentar" en `DocumentDetail.tsx` (visible solo para status ERROR/REVIEW_NEEDED).
 
-- [ ] **K2. Exportación CSV/Excel de campos extraídos**
-  - `GET /documents/export?format=csv|xlsx&status=PROCESSED&date_from=...` — exporta los campos extraídos de múltiples documentos en una hoja de cálculo.
-  - Usar `openpyxl` para Excel y el módulo `csv` estándar para CSV.
-  - Caso de uso principal: contabilidad descarga todas las facturas del mes.
-  - Agregar botón "Exportar" en el Dashboard.
+- [x] **K2. Exportación CSV/Excel de campos extraídos**
+  - `GET /documents/export?format=csv|xlsx&status=...&date_from=...` — exporta los campos extraídos de múltiples documentos.
+  - `openpyxl` para Excel, módulo `csv` estándar para CSV. Cada fila = un campo extraído.
+  - Botones CSV/Excel en el Dashboard (respetan el filtro de estado activo).
 
-- [ ] **K3. Rate limiting configurable por rol**
-  - El rate limit de upload (10/min) aplica igual a todos los roles, lo cual bloquea a admins en tests de carga.
-  - Modificar `limiter` para aplicar límites diferenciados: `user` → 10/min, `document_reviewer` → 30/min, `admin` → sin límite.
+- [x] **K3. Rate limiting configurable por rol**
+  - JWT ahora incluye claim `role` en el access token.
+  - `upload_key_func` genera clave `{role}:{ip}` por request.
+  - `get_upload_limit(key)`: `user`→10/min, `document_reviewer`→30/min, `admin`→1000/min.
+  - Compatible con slowapi 0.1.9 usando `key_func=` en el decorador.
 
 ---
 
