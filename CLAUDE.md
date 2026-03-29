@@ -592,6 +592,150 @@ El MVP se considera listo para producción cuando:
 
 ---
 
+## Roadmap — Fase 6: Nuevas Funcionalidades (Post-MVP)
+
+Las siguientes 14 funcionalidades fueron identificadas tras completar la Fase 5. Se organizan en 5 sprints temáticos ordenados por valor de negocio e interdependencias.
+
+> **Convención de estado:**
+> - `[ ]` Pendiente — `[~]` En progreso — `[x]` Completado
+
+---
+
+### Sprint K — Operaciones Esenciales (estimado: 1 sesión)
+
+Funcionalidades de bajo esfuerzo y alto impacto que completan el ciclo de vida del documento.
+
+- [ ] **K1. Reintento manual de procesamiento**
+  - `POST /documents/{id}/reprocess` — reencola el documento en Celery si está en `ERROR` o `REVIEW_NEEDED`.
+  - Solo propietario, reviewer o admin puede reencolar.
+  - Registrar en `AuditLog` con acción `"document.reprocess"`.
+  - Agregar botón "Reintentar" en `DocumentDetail.tsx`.
+
+- [ ] **K2. Exportación CSV/Excel de campos extraídos**
+  - `GET /documents/export?format=csv|xlsx&status=PROCESSED&date_from=...` — exporta los campos extraídos de múltiples documentos en una hoja de cálculo.
+  - Usar `openpyxl` para Excel y el módulo `csv` estándar para CSV.
+  - Caso de uso principal: contabilidad descarga todas las facturas del mes.
+  - Agregar botón "Exportar" en el Dashboard.
+
+- [ ] **K3. Rate limiting configurable por rol**
+  - El rate limit de upload (10/min) aplica igual a todos los roles, lo cual bloquea a admins en tests de carga.
+  - Modificar `limiter` para aplicar límites diferenciados: `user` → 10/min, `document_reviewer` → 30/min, `admin` → sin límite.
+
+---
+
+### Sprint L — Tiempo Real y Notificaciones (estimado: 2 sesiones)
+
+Elimina el polling manual del frontend y mejora la experiencia de usuario.
+
+- [ ] **L1. WebSocket para estado de documento en tiempo real**
+  - `GET /documents/{id}/ws` — el cliente se suscribe y recibe el cambio de estado (`PROCESSING → PROCESSED`) sin hacer polling.
+  - Usar `WebSocket` de FastAPI + canal Redis Pub/Sub para que el `ai_worker` notifique al backend cuando termina.
+  - Actualizar `DocumentDetail.tsx` para conectarse al WebSocket en lugar de hacer polling cada 5s.
+
+- [ ] **L2. Webhooks configurables**
+  - Nuevo modelo `Webhook(url, secret, events[], is_active)`.
+  - `POST /webhooks/` — registrar una URL externa para recibir eventos (`document.processed`, `document.error`).
+  - El `notification_worker` envía un POST firmado con HMAC-SHA256 al webhook cuando ocurre el evento.
+  - Casos de uso: integración con ERP, SAP, o sistemas de contabilidad externos.
+
+- [ ] **L3. Centro de notificaciones en el frontend**
+  - Campana en el header con lista de eventos recientes del usuario (documento procesado, error, corrección pendiente).
+  - Persistir en BD con modelo `Notification(user_id, message, is_read, created_at)`.
+  - Marcar como leídas con `PUT /notifications/{id}/read`.
+
+---
+
+### Sprint M — Búsqueda y Análisis Avanzado (estimado: 2 sesiones)
+
+Potencia la capacidad de encontrar y analizar información extraída por la IA.
+
+- [ ] **M1. Búsqueda full-text en campos extraídos**
+  - `GET /documents/?field_search=nombre_proveedor:Acme` — busca por valor de campo extraído.
+  - Requiere índice GIN en PostgreSQL sobre `extracted_data.final_value`.
+  - Nueva migración Alembic: `003_add_fulltext_index.py`.
+  - Agregar campo de búsqueda avanzada en el Dashboard.
+
+- [ ] **M2. API de estadísticas**
+  - `GET /stats/documents` — volumen por estado, tipo y fecha (últimos 7/30/90 días).
+  - `GET /stats/ai` — confianza promedio de clasificación, campos más corregidos por humanos (indicador de calidad de la IA).
+  - `GET /stats/users` — documentos subidos por usuario (solo admin).
+  - Alimenta dashboards de negocio y el panel de administración.
+
+- [ ] **M3. Extracción de tablas desde PDFs**
+  - Extender `ai_service.py` para que Gemini extraiga líneas de detalle de facturas (productos, cantidades, precios unitarios, subtotales).
+  - Nuevo modelo `ExtractedTable(document_id, table_name, rows: JSON)`.
+  - Nueva migración Alembic para la tabla.
+  - Renderizar la tabla en `DocumentDetail.tsx`.
+
+---
+
+### Sprint N — Panel de Administración y Workflow (estimado: 2 sesiones)
+
+Capacidades de gestión y control de procesos para administradores.
+
+- [ ] **N1. Panel de administración en el frontend**
+  - Nueva página `/admin` accesible solo para `admin` y `document_reviewer`.
+  - Secciones: métricas globales (usando `/stats/*`), gestión de `DocumentType` (crear/editar/desactivar desde UI), visor del `AuditLog` con filtros por usuario y acción.
+  - Gestión de usuarios: cambiar roles, activar/desactivar cuentas.
+
+- [ ] **N2. Gestión de DocumentType desde la API**
+  - `POST /documents/types/` — crear nuevo tipo de documento (solo admin).
+  - `PUT /documents/types/{id}` — actualizar nombre/descripción/estado.
+  - `DELETE /documents/types/{id}` — desactivar tipo (soft delete, `is_active=False`).
+  - Actualmente los tipos solo se crean via script inicial.
+
+- [ ] **N3. Flujo de aprobación (Workflow)**
+  - Nuevos estados: `PENDING_APPROVAL → APPROVED | REJECTED`.
+  - `POST /documents/{id}/approve` y `POST /documents/{id}/reject?reason=...` — solo `document_reviewer` o `admin`.
+  - Asignación de revisor: `PUT /documents/{id}/assign?reviewer_id=...`.
+  - Notificación automática al revisor cuando llega un documento asignado.
+  - Registrar todas las transiciones en `AuditLog`.
+
+---
+
+### Sprint O — Escalabilidad e Integraciones (estimado: 3 sesiones)
+
+Funcionalidades de mayor envergadura para escalar el sistema a múltiples organizaciones.
+
+- [ ] **O1. Ingesta masiva por CLI**
+  - Script `sapi_backend/scripts/bulk_ingest.py` para subir carpetas enteras de documentos.
+  - `python bulk_ingest.py --folder /ruta/facturas/ --type "Factura de Proveedor" --user admin`.
+  - Muestra barra de progreso, reporte final con éxitos/errores.
+  - Útil para la migración inicial de documentos históricos.
+
+- [ ] **O2. Integración con almacenamiento externo**
+  - Importar documentos desde Google Drive o Dropbox vía OAuth 2.0.
+  - `POST /integrations/gdrive/import?folder_id=...` — importa todos los PDFs de una carpeta de Drive.
+  - Programar ingestas automáticas periódicas via Celery Beat.
+
+- [ ] **O3. Multi-tenancy**
+  - Agregar `tenant_id` (UUID) a los modelos `User`, `Document`, `DocumentType`, `AuditLog`.
+  - Nueva migración Alembic con índices por `tenant_id`.
+  - Middleware que inyecta el `tenant_id` en cada request a partir del subdominio o header `X-Tenant-ID`.
+  - Cada organización ve únicamente sus propios datos — aislamiento completo a nivel de BD.
+  - Nuevo endpoint `POST /tenants/` para provisionamiento (superadmin global).
+
+---
+
+### Orden Recomendado de Ejecución
+
+```
+Sprint K ── Sprint L ── Sprint M
+(operaciones)  (tiempo real)  (búsqueda)
+     │               │
+     └───────────────┘
+             │
+             ▼
+       Sprint N ── Sprint O
+       (admin/wf)   (escala)
+```
+
+> Los sprints K–L son **recomendados como siguiente paso** — completan el ciclo de vida del documento y mejoran la UX sin cambios de arquitectura.
+> Los sprints M–N añaden capacidades analíticas y de gestión.
+> El sprint O (multi-tenancy) es una reescritura parcial — planificar como proyecto separado.
+
+---
+
 ## Notas para Claude Code
 
 - Al implementar cualquier sprint, mantener la cobertura de tests al 100% en backend.
