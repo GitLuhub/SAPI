@@ -737,6 +737,108 @@ Sprint K ── Sprint L ── Sprint M
 
 ---
 
+## Roadmap — Fase 7: Presentación como Proyecto de Portafolio
+
+El proyecto es técnicamente sólido para portafolio. El trabajo pendiente no es de código sino de **presentación y accesibilidad**. Estas tareas maximizan el impacto ante reclutadores y revisores técnicos.
+
+> **Convención de estado:**
+> - `[ ]` Pendiente — `[~]` En progreso — `[x]` Completado
+
+---
+
+### Sprint P — Demo Pública y Accesibilidad (estimado: 1 sesión)
+
+Sin una URL funcional, un reclutador tiene que clonar, configurar `.env` con API key propia y esperar que Docker funcione en su máquina. Pocos lo harán.
+
+- [ ] **P1. Despliegue en entorno público**
+  - Opciones recomendadas: Railway, Render, o VPS (DigitalOcean/Hetzner).
+  - Configurar variables de entorno de producción (`ENVIRONMENT=production`, `GEMINI_API_KEY`, S3 real o local).
+  - Documentar la URL pública en el README con badge de estado (`uptime`).
+  - Usar una cuenta de Gemini con cuota suficiente para demostraciones.
+
+- [ ] **P2. Datos de ejemplo pre-cargados (seed)**
+  - Script `sapi_backend/scripts/seed_demo.py` que inserte:
+    - 2 usuarios de prueba: `reviewer / reviewer123` (rol `document_reviewer`), `user1 / user123` (rol `user`).
+    - 5–8 documentos ya procesados (facturas y contratos ficticios con campos extraídos reales).
+  - Ejecutar el seed automáticamente en el primer arranque si la BD está vacía.
+  - Permite que cualquier visitante vea el sistema funcionando sin subir sus propios documentos.
+
+- [ ] **P3. GIF / video demo en el README**
+  - Grabar un screencast de 60–90 segundos mostrando el flujo completo:
+    1. Login → Dashboard con documentos pre-cargados
+    2. Subir una factura real → esperar procesamiento → ver campos extraídos
+    3. Corregir un campo (HIL) → guardar
+    4. Exportar CSV
+  - Herramientas sugeridas: `peek` (Linux), LICEcap (Windows), o `ffmpeg` para convertir a GIF.
+  - Incrustar el GIF en el README justo debajo del título.
+
+---
+
+### Sprint Q — README como Carta de Presentación (estimado: 1 sesión)
+
+El README actual describe *qué* es SAPI pero no *por qué es impresionante técnicamente*. Un reclutador debería entenderlo en 10 segundos.
+
+- [ ] **Q1. Sección "Por qué este proyecto"**
+  - Añadir al inicio del README (antes del stack) un párrafo de 3–4 líneas explicando las decisiones de arquitectura:
+    - Por qué Celery en vez de `asyncio` puro para el procesamiento IA.
+    - Por qué Repository Pattern en vez de lógica CRUD en los endpoints.
+    - Por qué refresh tokens httponly en vez de guardar el JWT en localStorage.
+  - Esta sección demuestra criterio de ingeniería, no solo habilidad de codificación.
+
+- [ ] **Q2. Badges en el README**
+  - Añadir badges visibles al inicio:
+    - Cobertura de tests (shields.io estático: `99.93%`)
+    - Python version, FastAPI version
+    - Docker Compose
+    - Estado del build (si se configura CI/CD)
+  - Los badges dan señales visuales rápidas de calidad antes de leer el código.
+
+- [ ] **Q3. Sección de decisiones técnicas destacadas**
+  - Tabla o lista con las decisiones no obvias más importantes:
+    - Circuit breaker para Gemini API (evita saturar cuota en cascada de fallos)
+    - Rate limiting por rol embebido en JWT (sin consulta BD por request)
+    - Logs estructurados JSON + Prometheus para observabilidad en producción
+    - Tests de integración separados con PostgreSQL real (no solo SQLite in-memory)
+  - Cada decisión con 1 línea de "por qué" — demuestra pensamiento de producción.
+
+---
+
+### Sprint R — Evaluación de Calidad de la IA (estimado: 2 sesiones)
+
+Relevante especialmente para roles de ML Engineer / AI Engineer. Cierra el gap más importante para ese perfil.
+
+- [ ] **R1. Dataset de evaluación (ground truth)**
+  - Crear `sapi_backend/evaluation/ground_truth.json` con 10–15 documentos ficticios y sus campos correctos esperados.
+  - Formato: `[{ "document": "...", "expected": { "numero_factura": "F-001", ... } }]`
+
+- [ ] **R2. Script de evaluación de precisión**
+  - `sapi_backend/scripts/evaluate_extraction.py` — procesa el dataset y calcula:
+    - Precisión por campo (% de extracciones correctas)
+    - Precisión de clasificación (Factura vs Contrato)
+    - Confianza promedio vs precisión real (calibración del modelo)
+  - Genera un reporte JSON + tabla en consola.
+
+- [ ] **R3. Documentar métricas en el README**
+  - Añadir sección "Rendimiento de la IA" con los resultados reales:
+    - "Precisión de clasificación: 95% sobre 15 documentos de prueba"
+    - "Campos con mayor tasa de error: `nif_cif_proveedor` (formato variable)"
+  - Métricas reales, aunque sean modestas, demuestran rigor científico.
+
+---
+
+### Orden Recomendado de Ejecución (Fase 7)
+
+```
+Sprint P ── Sprint Q ── Sprint R
+(demo)      (README)    (eval IA)
+```
+
+> Sprint P es el de mayor impacto inmediato — sin demo pública, el resto pierde efectividad.
+> Sprint Q es rápido y de alto retorno: mejora la primera impresión sin tocar código.
+> Sprint R añade profundidad técnica para perfiles especializados en IA/ML.
+
+---
+
 ## Notas para Claude Code
 
 - Al implementar cualquier sprint, mantener la cobertura de tests al 100% en backend.
