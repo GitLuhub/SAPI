@@ -30,6 +30,7 @@ class CRUDDocument:
         search_query: Optional[str] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        upload_user_id: Optional[UUID] = None,
         page: int = 1,
         size: int = 10,
     ) -> Tuple[List[Document], int]:
@@ -50,6 +51,8 @@ class CRUDDocument:
             query = query.filter(
                 Document.created_at <= datetime.combine(date_to, datetime.max.time())
             )
+        if upload_user_id:
+            query = query.filter(Document.upload_user_id == upload_user_id)
 
         total = query.count()
         offset = (page - 1) * size

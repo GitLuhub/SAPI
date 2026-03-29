@@ -229,7 +229,7 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | Precisión clasificación IA | >90% | ✅ Verificado en producción (0.95–0.99) |
 | Tiempo procesamiento | <30s/documento | ❓ Sin medir formalmente |
 | Tiempo respuesta API | <500ms | ❓ Sin medir formalmente |
-| Cobertura de tests (backend) | 100% | ✅ 228 tests |
+| Cobertura de tests (backend) | 100% | ✅ 239 tests |
 | Cobertura de tests (frontend) | >80% | ✅ 49 tests, 92.85% funciones |
 | Reducción trabajo manual | -70% | ❓ Sin medir |
 | Volumen objetivo | 10 000 docs/mes | ❓ Sin test de carga |
@@ -515,21 +515,21 @@ Requisitos del PRD marcados como ausentes o parciales en el informe.
 
 ---
 
-### Sprint J — Cumplimiento Normativo GDPR (estimado: 1 sesión)
+### Sprint J — Cumplimiento Normativo GDPR ✅ COMPLETO
 
 Requerido si el sistema maneja datos de ciudadanos de la UE.
 
-- [ ] **J1. Endpoint de exportación de datos del usuario**
+- [x] **J1. Endpoint de exportación de datos del usuario**
   - `GET /users/me/export` → retorna JSON con todos los documentos y campos extraídos del usuario.
 
-- [ ] **J2. Endpoint de eliminación completa (derecho al olvido)**
+- [x] **J2. Endpoint de eliminación completa (derecho al olvido)**
   - `DELETE /users/me` → elimina usuario, sus documentos, campos extraídos, audit logs y archivos del storage.
   - Requiere confirmación con contraseña actual.
 
-- [ ] **J3. Cifrado en reposo**
-  - PostgreSQL: configurar `pgcrypto` o usar cifrado a nivel de disco en el servidor.
-  - S3: activar SSE-S3 o SSE-KMS en el bucket.
-  - Documentar configuración en `.env.example`.
+- [x] **J3. Cifrado en reposo**
+  - PostgreSQL: documentado en `.env.example` (opción A: cifrado de disco en proveedor cloud; opción B: pgcrypto).
+  - S3: documentado con instrucciones para SSE-S3/SSE-KMS vía consola y CLI.
+  - Almacenamiento local: recomendación de LUKS/BitLocker a nivel de SO.
 
 ---
 

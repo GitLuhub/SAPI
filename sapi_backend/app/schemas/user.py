@@ -1,7 +1,7 @@
 from pydantic import BaseModel, EmailStr, ConfigDict
 from uuid import UUID
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 from enum import Enum
 
 
@@ -61,3 +61,41 @@ class UserResponse(BaseModel):
 class UserLogin(BaseModel):
     username: str
     password: str
+
+
+# ---------------------------------------------------------------------------
+# GDPR schemas
+# ---------------------------------------------------------------------------
+
+class AccountDeleteRequest(BaseModel):
+    password: str
+
+
+class ExtractedFieldExport(BaseModel):
+    field_name: str
+    field_label: Optional[str] = None
+    ai_extracted_value: Optional[str] = None
+    final_value: str
+    is_corrected: bool
+    corrected_at: Optional[datetime] = None
+
+
+class DocumentExport(BaseModel):
+    id: UUID
+    original_filename: str
+    status: str
+    mime_type: Optional[str] = None
+    file_size: Optional[str] = None
+    created_at: datetime
+    extracted_fields: List[ExtractedFieldExport] = []
+
+
+class UserDataExport(BaseModel):
+    id: UUID
+    username: str
+    email: str
+    full_name: Optional[str] = None
+    role: str
+    created_at: datetime
+    exported_at: datetime
+    documents: List[DocumentExport] = []
