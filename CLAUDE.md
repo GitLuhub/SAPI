@@ -217,8 +217,8 @@ Confianza de clasificación: umbral 0.7 (< 0.7 → `REVIEW_NEEDED`, ≥ 0.7 → 
 | **Fase 1** — Backend Core | ✅ Completa | JWT auth + refresh, CRUD documentos, storage S3/local, modelos DB |
 | **Fase 2** — IA/Workers | ✅ Completa | Gemini integrado, Celery con reintentos, extracción de entidades |
 | **Fase 3** — Frontend | ✅ Completa | Login, Dashboard, DocumentDetail, upload, corrección HIL, PDF viewer |
-| **Fase 4** — Testing | ✅ Completa | 191 backend + 49 frontend, coberturas >80% |
-| **Fase 5** — Hardening | 🔄 En curso | Ver plan de producción más abajo |
+| **Fase 4** — Testing | ✅ Completa | 239 backend + 49 frontend, coberturas >80% |
+| **Fase 5** — Hardening | ✅ Completa | Sprints A–J completados (GDPR, monitoring, perf, infra) |
 
 ---
 
@@ -542,14 +542,14 @@ Sprint A ✅ →  Sprint B ✅ →  Sprint C ✅ →  Sprint D ✅
     └───────────────────────────────────────┘
                         │
                         ▼
-Sprint E  →  Sprint F  →  Sprint G
-(perf)       (HTTPS+ops)  (monitoring)
+Sprint E ✅ →  Sprint F ✅ →  Sprint G ✅
+(perf)         (HTTPS+ops)   (monitoring)
     │
     └───────────────────────────────────────────┐
                                                 │
                                                 ▼
-                                    Sprint H  →  Sprint I  →  Sprint J
-                                    (tests)      (deuda)       (GDPR)
+                                    Sprint H ✅ →  Sprint I ✅ →  Sprint J ✅
+                                    (tests)        (deuda)         (GDPR)
 ```
 
 > Los sprints A–D son **prerrequisito para producción**.
