@@ -120,4 +120,8 @@ export const documentsApi = {
     const response = await apiClient.post<DocumentStatusResponse>(`/documents/${documentId}/reprocess`);
     return response.data;
   },
+
+  deleteDocument: async (documentId: string): Promise<void> => {
+    await apiClient.delete(`/documents/${documentId}`);
+  },
 };

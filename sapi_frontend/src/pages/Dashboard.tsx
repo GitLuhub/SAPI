@@ -14,6 +14,7 @@ import {
   Clock,
   XCircle,
   Download,
+  Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import type { Document, DocumentStatus, DocumentType } from '@/types';
@@ -64,6 +65,23 @@ export default function DashboardPage() {
       toast.error(error.response?.data?.detail || 'Error al subir el documento');
     },
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: (documentId: string) => documentsApi.deleteDocument(documentId),
+    onSuccess: () => {
+      toast.success('Documento eliminado');
+      queryClient.invalidateQueries({ queryKey: ['documents'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.detail || 'Error al eliminar el documento');
+    },
+  });
+
+  const handleDelete = (doc: Document) => {
+    if (window.confirm(`¿Eliminar "${doc.original_filename}"? Esta acción no se puede deshacer.`)) {
+      deleteMutation.mutate(doc.id);
+    }
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -268,12 +286,23 @@ export default function DashboardPage() {
                               {new Date(doc.created_at).toLocaleDateString()}
                             </td>
                             <td className="py-3 px-4">
-                              <button
-                                onClick={() => navigate(`/documents/${doc.id}`)}
-                                className="p-2 text-secondary-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
-                              >
-                                <Eye className="w-5 h-5" />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => navigate(`/documents/${doc.id}`)}
+                                  className="p-2 text-secondary-600 hover:text-primary-600 hover:bg-primary-50 rounded-lg transition-colors"
+                                  title="Ver detalle"
+                                >
+                                  <Eye className="w-5 h-5" />
+                                </button>
+                                <button
+                                  onClick={() => handleDelete(doc)}
+                                  disabled={deleteMutation.isPending}
+                                  className="p-2 text-secondary-400 hover:text-danger hover:bg-danger/10 rounded-lg transition-colors disabled:opacity-50"
+                                  title="Eliminar documento"
+                                >
+                                  <Trash2 className="w-5 h-5" />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
