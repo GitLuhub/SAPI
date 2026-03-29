@@ -100,3 +100,6 @@ nginx/ssl/*.key
 # Backups de base de datos
 backups/*.sql.gz
 backups/*.sql
+
+# Frontend coverage
+sapi_frontend/coverage/
